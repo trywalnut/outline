@@ -1,0 +1,6 @@
+{
+  "id": "arrow-approvals",
+  "name": "Arrow Approvals",
+  "priority": 200,
+  "description": "Required-reviewer approval workflow with state machine, document edit lock, and audit log."
+}

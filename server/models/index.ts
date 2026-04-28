@@ -86,3 +86,5 @@ export { default as UserPasskey } from "./UserPasskey";
 // only this single block as a merge surface against upstream.
 export { default as ArrowTag } from "../../plugins/arrow-tags/server/models/ArrowTag";
 export { default as ArrowDocumentTag } from "../../plugins/arrow-tags/server/models/ArrowDocumentTag";
+export { default as ArrowReviewRequest } from "../../plugins/arrow-approvals/server/models/ArrowReviewRequest";
+export { default as ArrowReviewAction } from "../../plugins/arrow-approvals/server/models/ArrowReviewAction";
