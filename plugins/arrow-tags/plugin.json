@@ -1,0 +1,6 @@
+{
+  "id": "arrow-tags",
+  "name": "Arrow Tags",
+  "priority": 200,
+  "description": "Adds team-scoped tags that can be applied to documents."
+}
