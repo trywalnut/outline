@@ -1,11 +1,11 @@
 name: Build & push arrow image
 
-# Builds the arrow fork as a Docker image and pushes to ECR. Runs on every
-# push to the `arrow` branch. The base image is built first (heavy: full
-# yarn install + build), then the slim runtime image. Both go to ECR.
+# Builds the arrow fork and pushes to ECR. Uses plain `docker build`
+# (default driver) so the base image lives in the local daemon and can
+# be referenced by tag in the runtime build.
 #
-# Authentication is via GitHub OIDC → IAM role
-# `github-actions-arrow-outline` (no long-lived secrets).
+# Auth via GitHub OIDC → IAM role github-actions-arrow-outline (no
+# long-lived secrets).
 
 on:
   push:
@@ -37,27 +37,20 @@ jobs:
         id: ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Build base image
         run: |
-          docker buildx build \
-            --platform linux/amd64 \
+          docker build \
             -f Dockerfile.base \
             -t outline-arrow-base:${{ github.sha }} \
-            --load \
             .
 
       - name: Build runtime image
         run: |
-          docker buildx build \
-            --platform linux/amd64 \
+          docker build \
             -f Dockerfile \
             --build-arg BASE_IMAGE=outline-arrow-base:${{ github.sha }} \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }} \
             -t $ECR_REGISTRY/$ECR_REPOSITORY:arrow-latest \
-            --load \
             .
 
       - name: Push to ECR
