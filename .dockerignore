@@ -23,3 +23,7 @@ node_modules
 **/*.test.jsx
 **/__tests__
 **/__mocks__
+
+# Arrow fork: BDD test files live in outline-doc/ as symlinks; not needed in image
+features
+cucumber.cjs
