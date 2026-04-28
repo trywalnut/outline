@@ -1,0 +1,71 @@
+name: Build & push arrow image
+
+# Builds the arrow fork as a Docker image and pushes to ECR. Runs on every
+# push to the `arrow` branch. The base image is built first (heavy: full
+# yarn install + build), then the slim runtime image. Both go to ECR.
+#
+# Authentication is via GitHub OIDC → IAM role
+# `github-actions-arrow-outline` (no long-lived secrets).
+
+on:
+  push:
+    branches: [arrow]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: 622608717163.dkr.ecr.us-east-1.amazonaws.com
+  ECR_REPOSITORY: arrow-outline
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::622608717163:role/github-actions-arrow-outline
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build base image
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            -f Dockerfile.base \
+            -t outline-arrow-base:${{ github.sha }} \
+            --load \
+            .
+
+      - name: Build runtime image
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            -f Dockerfile \
+            --build-arg BASE_IMAGE=outline-arrow-base:${{ github.sha }} \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }} \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:arrow-latest \
+            --load \
+            .
+
+      - name: Push to ECR
+        run: |
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }}
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:arrow-latest
+
+      - name: Output image URI
+        run: |
+          echo "Pushed: $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }}"
+          echo "Pushed: $ECR_REGISTRY/$ECR_REPOSITORY:arrow-latest"
