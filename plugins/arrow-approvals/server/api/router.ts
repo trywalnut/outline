@@ -47,7 +47,9 @@ router.post(
     const { transaction: tx } = ctx.state;
     const { documentId, reviewers, threshold } = ctx.input.body;
 
-    const document = await Document.findByPk(documentId, { transaction: tx });
+    const document = await Document.scope({
+      method: ["withMembership", user.id],
+    }).findByPk(documentId, { transaction: tx });
     if (!document) {
       throw httpErrors(404, "document not found", {
         id: "not_found",
