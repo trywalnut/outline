@@ -39,6 +39,12 @@ import Notices from "./Notices";
 import References from "./References";
 import RevisionViewer from "./RevisionViewer";
 import SharedHeader from "./SharedHeader";
+// ── Arrow fork additions ────────────────────────────────────────────────
+// In-doc UI for the arrow-approvals + arrow-tags plugins. Imported here
+// instead of going through a plugin slot because the doc scene has no
+// extension point for header-area injections in upstream Outline.
+import DocApprovalBar from "../../../../plugins/arrow-approvals/client/components/DocApprovalBar";
+import DocTagBar from "../../../../plugins/arrow-tags/client/components/DocTagBar";
 
 type LocationState = {
   title?: string;
@@ -369,6 +375,10 @@ function DocumentScene({
                 ) : (
                   <>
                     <Notices document={document} readOnly={readOnly} />
+
+                    {/* Arrow fork: approval state bar + tag chips above the title */}
+                    <DocApprovalBar documentId={document.id} />
+                    <DocTagBar documentId={document.id} canEdit={abilities.update} />
 
                     {showContents && (
                       <PrintContentsContainer>
