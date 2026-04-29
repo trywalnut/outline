@@ -131,10 +131,7 @@ router.post(
     const { documentId, tagId } = ctx.input.body;
 
     const [doc, tag] = await Promise.all([
-      Document.scope({ method: ["withMembership", user.id] }).findByPk(
-        documentId,
-        { transaction: tx }
-      ),
+      Document.findByPk(documentId, { userId: user.id, transaction: tx }),
       ArrowTag.findByPk(tagId, { transaction: tx }),
     ]);
 
@@ -193,9 +190,10 @@ router.post(
     const { transaction: tx } = ctx.state;
     const { documentId, tagId } = ctx.input.body;
 
-    const doc = await Document.scope({
-      method: ["withMembership", user.id],
-    }).findByPk(documentId, { transaction: tx });
+    const doc = await Document.findByPk(documentId, {
+      userId: user.id,
+      transaction: tx,
+    });
     if (!doc) {
       throw httpErrors(404, "document not found", {
         id: "not_found",
@@ -228,9 +226,7 @@ router.post(
     const { user } = ctx.state.auth;
     const { documentId } = ctx.input.body;
 
-    const doc = await Document.scope({
-      method: ["withMembership", user.id],
-    }).findByPk(documentId);
+    const doc = await Document.findByPk(documentId, { userId: user.id });
     if (!doc) {
       throw httpErrors(404, "document not found", {
         id: "not_found",
