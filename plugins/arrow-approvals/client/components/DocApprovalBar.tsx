@@ -145,6 +145,44 @@ function DocApprovalBarInner({ documentId }: Props) {
     }
   }, [documentId, refresh]);
 
+  // ── derived values (must be computed before any conditional returns
+  // so React hook order stays stable across renders) ──
+  const reviewers = useMemo(
+    () => (info && typeof info !== "string" ? info.requiredReviewers ?? [] : []),
+    [info]
+  );
+
+  const waitingOn = useMemo(() => {
+    if (!info || typeof info === "string") {
+      return null;
+    }
+    if (info.state !== "pending") {
+      return null;
+    }
+    const actedIds = new Set(
+      (info.actions ?? [])
+        .filter((a) => a.action === "approve" || a.action === "request_changes")
+        .map((a) => a.userId)
+    );
+    const remaining = (info.requiredReviewers ?? []).filter(
+      (id) => !actedIds.has(id)
+    );
+    if (remaining.length === 0) {
+      return null;
+    }
+    const names = remaining
+      .map((id) => users.get(id)?.name)
+      .filter(Boolean)
+      .slice(0, 3);
+    if (names.length === 0) {
+      return `${remaining.length} reviewer${remaining.length === 1 ? "" : "s"}`;
+    }
+    if (remaining.length > names.length) {
+      return `${names.join(", ")} and ${remaining.length - names.length} other${remaining.length - names.length === 1 ? "" : "s"}`;
+    }
+    return names.join(", ");
+  }, [info, users]);
+
   // Hide entirely on errors or while loading the very first time
   if (info === "loading" || info === "error") {
     return null;
@@ -178,7 +216,7 @@ function DocApprovalBarInner({ documentId }: Props) {
   }
 
   const isAuthor = info.requestedById === currentUser.id;
-  const isReviewer = info.requiredReviewers.includes(currentUser.id);
+  const isReviewer = reviewers.includes(currentUser.id);
   const hasActed = (info.actions ?? []).some(
     (a) => a.userId === currentUser.id && (a.action === "approve" || a.action === "request_changes")
   );
@@ -200,27 +238,6 @@ function DocApprovalBarInner({ documentId }: Props) {
     info.state === "changes_requested" ? WarningIcon :
     info.state === "pending" ? EditIcon :
     CloseIcon;
-
-  // Build "waiting on" message
-  const waitingOn = useMemo(() => {
-    if (info.state !== "pending") return null;
-    const actedIds = new Set(
-      (info.actions ?? [])
-        .filter((a) => a.action === "approve" || a.action === "request_changes")
-        .map((a) => a.userId)
-    );
-    const remaining = info.requiredReviewers.filter((id) => !actedIds.has(id));
-    if (remaining.length === 0) return null;
-    const names = remaining
-      .map((id) => users.get(id)?.name)
-      .filter(Boolean)
-      .slice(0, 3);
-    if (names.length === 0) return `${remaining.length} reviewer${remaining.length === 1 ? "" : "s"}`;
-    if (remaining.length > names.length) {
-      return `${names.join(", ")} and ${remaining.length - names.length} other${remaining.length - names.length === 1 ? "" : "s"}`;
-    }
-    return names.join(", ");
-  }, [info, users]);
 
   return (
     <Bar $tone={tone}>
