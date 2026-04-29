@@ -52,3 +52,12 @@ export const ReviewsListSchema = BaseSchema.extend({
   }),
 });
 export type ReviewsListReq = z.infer<typeof ReviewsListSchema>;
+
+export const ReviewsEditReviewersSchema = BaseSchema.extend({
+  body: z.object({
+    requestId: z.string().uuid(),
+    reviewers: z.array(z.string().uuid()).min(1),
+    threshold: z.number().int().optional(),
+  }),
+});
+export type ReviewsEditReviewersReq = z.infer<typeof ReviewsEditReviewersSchema>;

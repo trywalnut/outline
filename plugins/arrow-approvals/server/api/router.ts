@@ -17,6 +17,7 @@ import { ApprovalEngine } from "../services/ApprovalEngine";
 import {
   ReviewsApproveSchema,
   ReviewsCancelSchema,
+  ReviewsEditReviewersSchema,
   ReviewsInfoSchema,
   ReviewsListSchema,
   ReviewsReRequestSchema,
@@ -25,6 +26,7 @@ import {
   ReviewsUnlockSchema,
   type ReviewsApproveReq,
   type ReviewsCancelReq,
+  type ReviewsEditReviewersReq,
   type ReviewsInfoReq,
   type ReviewsListReq,
   type ReviewsReRequestReq,
@@ -191,6 +193,36 @@ router.post(
       tx
     );
     ctx.body = { data: presentReviewRequest(updated, 0) };
+  }
+);
+
+router.post(
+  "arrow.reviews.editReviewers",
+  auth(),
+  validate(ReviewsEditReviewersSchema),
+  transaction(),
+  async (ctx: APIContext<ReviewsEditReviewersReq>) => {
+    const { user } = ctx.state.auth;
+    const { transaction: tx } = ctx.state;
+    const { requestId, reviewers, threshold } = ctx.input.body;
+
+    const request = await ArrowReviewRequest.findByPk(requestId, { transaction: tx });
+    if (!request) {
+      throw httpErrors(404, "review not found", {
+        id: "not_found",
+        isReportable: false,
+      });
+    }
+
+    const updated = await ApprovalEngine.editReviewers(
+      { request, actor: user, reviewerIds: reviewers, threshold },
+      tx
+    );
+    const approvals = await ArrowReviewAction.count({
+      where: { requestId, action: "approve" },
+      transaction: tx,
+    });
+    ctx.body = { data: presentReviewRequest(updated, approvals) };
   }
 );
 

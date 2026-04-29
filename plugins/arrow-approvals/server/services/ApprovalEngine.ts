@@ -245,6 +245,61 @@ export class ApprovalEngine {
   }
 
   /**
+   * Edit the reviewer list on an active (pending or changes_requested)
+   * review. Only the author can do this. Approvals from removed reviewers
+   * remain in the audit log but no longer count toward the threshold;
+   * approvals from kept reviewers are preserved.
+   *
+   * @throws if not author, or review is in a terminal state.
+   */
+  static async editReviewers(
+    args: {
+      request: ArrowReviewRequest;
+      actor: User;
+      reviewerIds: string[];
+      threshold?: number;
+    },
+    transaction: Transaction
+  ): Promise<ArrowReviewRequest> {
+    const { request, actor, reviewerIds, threshold } = args;
+    if (actor.id !== request.requestedById) {
+      throw httpErrors(403, "only the author can edit reviewers", {
+        id: "permission_denied",
+        isReportable: false,
+      });
+    }
+    if (request.state !== "pending" && request.state !== "changes_requested") {
+      throw httpErrors(409, "review is not in an editable state", {
+        id: "invalid_state",
+        isReportable: false,
+      });
+    }
+    if (reviewerIds.includes(actor.id)) {
+      throw httpErrors(400, "author cannot be reviewer", {
+        id: "author_cannot_be_reviewer",
+        isReportable: false,
+      });
+    }
+    const newThreshold = threshold ?? Math.min(request.threshold, reviewerIds.length);
+    if (newThreshold < 1) {
+      throw httpErrors(400, "threshold must be at least 1", {
+        id: "invalid_threshold",
+        isReportable: false,
+      });
+    }
+    if (newThreshold > reviewerIds.length) {
+      throw httpErrors(400, "threshold exceeds reviewer count", {
+        id: "threshold_exceeds_reviewer_count",
+        isReportable: false,
+      });
+    }
+    request.requiredReviewers = reviewerIds;
+    request.threshold = newThreshold;
+    await request.save({ transaction });
+    return request;
+  }
+
+  /**
    * Approved-doc unlock — author flips the doc back to draft for further
    * edits. The prior review request is closed (state stays `approved` for
    * historical record) and edits are unblocked.

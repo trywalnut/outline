@@ -54,6 +54,8 @@ function DocApprovalBarInner({ documentId }: Props) {
   const { users } = useStores();
   const [info, setInfo] = useState<ReviewInfo | null | "loading" | "error">("loading");
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [editPickerOpen, setEditPickerOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -145,6 +147,22 @@ function DocApprovalBarInner({ documentId }: Props) {
       toast.error((err as { message?: string }).message ?? "Failed to request review");
     }
   }, [documentId, refresh]);
+
+  const handleEditReviewers = useCallback(async (reviewerIds: string[], threshold: number) => {
+    if (!info || typeof info === "string") {
+      return;
+    }
+    try {
+      await client.post("/arrow.reviews.editReviewers", {
+        requestId: info.id, reviewers: reviewerIds, threshold,
+      });
+      toast.success("Reviewers updated");
+      setEditPickerOpen(false);
+      await refresh();
+    } catch (err) {
+      toast.error((err as { message?: string }).message ?? "Failed to update reviewers");
+    }
+  }, [info, refresh]);
 
   // ── derived values (must be computed before any conditional returns
   // so React hook order stays stable across renders) ──
@@ -240,51 +258,120 @@ function DocApprovalBarInner({ documentId }: Props) {
     info.state === "pending" ? EditIcon :
     CloseIcon;
 
-  return (
-    <Bar $tone={tone}>
-      <BarContent>
-        <Badge $tone={tone}>
-          <StateIcon size={14} /> {stateLabel}
-        </Badge>
-        {waitingOn && (
-          <BarText>
-            Waiting on <strong>{waitingOn}</strong>
-          </BarText>
-        )}
-        {info.state === "approved" && info.completedAt && (
-          <BarText>
-            Approved {timeAgo(info.completedAt)}
-          </BarText>
-        )}
-        {info.state === "changes_requested" && (
-          <BarText>
-            Author needs to address feedback and re-request review.
-          </BarText>
-        )}
-      </BarContent>
+  const hasHistory = (info.actions ?? []).length > 0;
+  const canEditReviewers =
+    isAuthor && (info.state === "pending" || info.state === "changes_requested");
 
-      <BarActions>
-        {isReviewer && !isAuthor && info.state === "pending" && !hasActed && (
-          <>
-            <Button onClick={handleApprove}>Approve</Button>
-            <Button neutral onClick={handleRequestChanges}>Request changes</Button>
-          </>
-        )}
-        {isAuthor && info.state === "pending" && (
-          <Button neutral onClick={handleCancel}>Cancel review</Button>
-        )}
-        {isAuthor && info.state === "changes_requested" && (
-          <>
-            <Button onClick={handleReRequest}>Re-request review</Button>
-            <Button neutral onClick={handleCancel}>Cancel</Button>
-          </>
-        )}
-        {isAuthor && info.state === "approved" && (
-          <Button neutral onClick={handleUnlock}>Unlock for edits</Button>
-        )}
-      </BarActions>
-    </Bar>
+  return (
+    <BarWrap>
+      <Bar $tone={tone}>
+        <BarContent>
+          <Badge $tone={tone}>
+            <StateIcon size={14} /> {stateLabel}
+          </Badge>
+          {waitingOn && (
+            <BarText>
+              Waiting on <strong>{waitingOn}</strong>
+            </BarText>
+          )}
+          {info.state === "approved" && info.completedAt && (
+            <BarText>
+              Approved {timeAgo(info.completedAt)}
+            </BarText>
+          )}
+          {info.state === "changes_requested" && (
+            <BarText>
+              Author needs to address feedback and re-request review.
+            </BarText>
+          )}
+          {canEditReviewers && (
+            <SecondaryLink type="button" onClick={() => setEditPickerOpen(true)}>
+              Edit reviewers
+            </SecondaryLink>
+          )}
+          {hasHistory && (
+            <SecondaryLink type="button" onClick={() => setHistoryOpen((o) => !o)}>
+              {historyOpen ? "Hide history" : "View history"}
+            </SecondaryLink>
+          )}
+        </BarContent>
+
+        <BarActions>
+          {isReviewer && !isAuthor && info.state === "pending" && !hasActed && (
+            <>
+              <Button onClick={handleApprove}>Approve</Button>
+              <Button neutral onClick={handleRequestChanges}>Request changes</Button>
+            </>
+          )}
+          {isAuthor && info.state === "pending" && (
+            <Button neutral onClick={handleCancel}>Cancel review</Button>
+          )}
+          {isAuthor && info.state === "changes_requested" && (
+            <>
+              <Button onClick={handleReRequest}>Re-request review</Button>
+              <Button neutral onClick={handleCancel}>Cancel</Button>
+            </>
+          )}
+          {isAuthor && info.state === "approved" && (
+            <Button neutral onClick={handleUnlock}>Unlock for edits</Button>
+          )}
+        </BarActions>
+      </Bar>
+
+      {historyOpen && hasHistory && (
+        <HistoryPanel>
+          <HistoryTitle>Activity</HistoryTitle>
+          <HistoryList>
+            {(info.actions ?? []).map((a) => {
+              const userName = users.get(a.userId)?.name ?? "someone";
+              const verb = actionVerb(a.action);
+              return (
+                <HistoryRow key={a.id}>
+                  <HistoryDot data-action={a.action} />
+                  <HistoryBody>
+                    <HistoryHeading>
+                      <strong>{userName}</strong> {verb} ·{" "}
+                      <HistoryTime>{timeAgo(a.createdAt)}</HistoryTime>
+                    </HistoryHeading>
+                    {a.body && <HistoryComment>{a.body}</HistoryComment>}
+                  </HistoryBody>
+                </HistoryRow>
+              );
+            })}
+          </HistoryList>
+        </HistoryPanel>
+      )}
+
+      {editPickerOpen && (
+        <ReviewerPicker
+          documentId={documentId}
+          currentUserId={currentUser.id}
+          mode="edit"
+          initialSelected={info.requiredReviewers ?? []}
+          initialThreshold={info.threshold}
+          onCancel={() => setEditPickerOpen(false)}
+          onSubmit={handleEditReviewers}
+        />
+      )}
+    </BarWrap>
   );
+}
+
+function actionVerb(action: string): string {
+  switch (action) {
+    case "approve":
+      return "approved";
+    case "request_changes":
+      return "requested changes";
+    case "cancel":
+      return "cancelled the review";
+    case "re_request":
+      return "re-requested review";
+    case "unlock":
+      return "unlocked the document";
+    default:
+      return action;
+  }
 }
 
 function timeAgo(iso: string): string {
@@ -302,17 +389,25 @@ function timeAgo(iso: string): string {
 function ReviewerPicker({
   documentId,
   currentUserId,
+  mode = "request",
+  initialSelected,
+  initialThreshold,
   onCancel,
   onSubmit,
 }: {
   documentId: string;
   currentUserId: string;
+  mode?: "request" | "edit";
+  initialSelected?: string[];
+  initialThreshold?: number;
   onCancel: () => void;
   onSubmit: (reviewerIds: string[], threshold: number) => void;
 }) {
   const { users } = useStores();
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [threshold, setThreshold] = useState(1);
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(initialSelected ?? [])
+  );
+  const [threshold, setThreshold] = useState(initialThreshold ?? 1);
   const [query, setQuery] = useState("");
 
   useEffect(() => {
@@ -338,8 +433,12 @@ function ReviewerPicker({
   return (
     <PickerOverlay onClick={onCancel}>
       <PickerCard onClick={(e) => e.stopPropagation()}>
-        <PickerTitle>Request review</PickerTitle>
-        <PickerHint>Pick reviewers from your workspace and set how many approvals you need.</PickerHint>
+        <PickerTitle>{mode === "edit" ? "Edit reviewers" : "Request review"}</PickerTitle>
+        <PickerHint>
+          {mode === "edit"
+            ? "Add or remove reviewers. Approvals from kept reviewers stay; approvals from removed reviewers no longer count."
+            : "Pick reviewers from your workspace and set how many approvals you need."}
+        </PickerHint>
 
         <PickerSearch
           type="search"
@@ -387,7 +486,7 @@ function ReviewerPicker({
               disabled={selected.size === 0 || threshold > selected.size}
               onClick={() => onSubmit(Array.from(selected), threshold)}
             >
-              Send for review
+              {mode === "edit" ? "Save changes" : "Send for review"}
             </Button>
           </PickerActions>
         </PickerFooter>
@@ -409,6 +508,10 @@ const toneColor = (theme: { brand?: Record<string, string> }, tone: Tone) => {
   }
 };
 
+const BarWrap = styled.div`
+  margin-bottom: 16px;
+`;
+
 const Bar = styled.div<{ $tone: Tone }>`
   display: flex;
   align-items: center;
@@ -416,11 +519,112 @@ const Bar = styled.div<{ $tone: Tone }>`
   gap: 16px;
   padding: 12px 16px;
   border-radius: 10px;
-  margin-bottom: 16px;
   background: ${(p) => toneColor(p.theme, p.$tone)}10;
   border: 1px solid ${(p) => toneColor(p.theme, p.$tone)}33;
   position: relative;
   flex-wrap: wrap;
+`;
+
+const SecondaryLink = styled.button`
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-family: inherit;
+  font-size: 12px;
+  color: ${(props) => props.theme.textSecondary};
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+
+  &:hover {
+    color: ${(props) => props.theme.text};
+  }
+`;
+
+const HistoryPanel = styled.div`
+  margin-top: 8px;
+  padding: 12px 16px 8px;
+  border-radius: 10px;
+  border: 1px solid ${(props) => props.theme.divider};
+  background: ${(props) => props.theme.backgroundSecondary};
+`;
+
+const HistoryTitle = styled.div`
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: ${(props) => props.theme.textTertiary};
+  margin-bottom: 8px;
+`;
+
+const HistoryList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+`;
+
+const HistoryRow = styled.div`
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+`;
+
+const HistoryDot = styled.span`
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 6px;
+  flex-shrink: 0;
+  background: ${(props) => props.theme.textTertiary};
+
+  &[data-action="approve"] {
+    background: ${(p) => p.theme.brand?.green ?? "#22c55e"};
+  }
+  &[data-action="request_changes"] {
+    background: ${(p) => p.theme.brand?.red ?? "#ef4444"};
+  }
+  &[data-action="cancel"] {
+    background: ${(p) => p.theme.textTertiary};
+  }
+  &[data-action="re_request"] {
+    background: ${(p) => p.theme.brand?.yellow ?? "#f59e0b"};
+  }
+  &[data-action="unlock"] {
+    background: ${(p) => p.theme.brand?.marine ?? "#0c1622"};
+  }
+`;
+
+const HistoryBody = styled.div`
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+`;
+
+const HistoryHeading = styled.div`
+  font-size: 13px;
+  color: ${(props) => props.theme.text};
+
+  strong {
+    font-weight: 600;
+  }
+`;
+
+const HistoryTime = styled.span`
+  color: ${(props) => props.theme.textTertiary};
+`;
+
+const HistoryComment = styled.div`
+  font-size: 13px;
+  color: ${(props) => props.theme.textSecondary};
+  background: ${(props) => props.theme.background};
+  border-left: 2px solid ${(props) => props.theme.divider};
+  padding: 6px 10px;
+  border-radius: 0 4px 4px 0;
+  margin-top: 4px;
+  white-space: pre-wrap;
 `;
 
 const BarContent = styled.div`

@@ -52,7 +52,7 @@ function SidebarReviewsLinkInner() {
 
   return (
     <SidebarLink
-      to="/settings/arrow-approvals"
+      to="/reviews"
       icon={<CheckmarkIcon />}
       label={
         <Flex align="center" justify="space-between">

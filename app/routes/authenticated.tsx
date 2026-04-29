@@ -33,6 +33,11 @@ const Drafts = lazy(() => import("~/scenes/Drafts"));
 const Home = lazy(() => import("~/scenes/Home"));
 const Search = lazy(() => import("~/scenes/Search"));
 const Trash = lazy(() => import("~/scenes/Trash"));
+// Arrow fork: dedicated /reviews scene so the inbox lives in the main app
+// shell instead of swapping into the Settings sidebar.
+const ArrowReviews = lazy(
+  () => import("../../plugins/arrow-approvals/client/scenes/ReviewsScene")
+);
 const Debug = lazy(() => import("~/scenes/Developer/Debug"));
 const Changesets = lazy(() => import("~/scenes/Developer/Changesets"));
 
@@ -76,6 +81,7 @@ function AuthenticatedRoutes() {
             {can.createDocument && (
               <Route exact path={trashPath()} component={Trash} />
             )}
+            <Route exact path="/reviews" component={ArrowReviews} />
             <Route path={`${homePath()}/:tab?`} component={Home} />
             <Redirect from="/dashboard" to={homePath()} />
             <Redirect exact from="/starred" to={homePath()} />
