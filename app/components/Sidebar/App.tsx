@@ -19,6 +19,8 @@ import TeamLogo from "../TeamLogo";
 import Tooltip from "../Tooltip";
 import Sidebar from "./Sidebar";
 import ArchiveLink from "./components/ArchiveLink";
+// Arrow fork: top-level Reviews entry surfaces the approvals inbox.
+import ArrowReviewsLink from "../../../plugins/arrow-approvals/client/components/SidebarReviewsLink";
 import Collections from "./components/Collections";
 import { DraftsLink } from "./components/DraftsLink";
 import DragPlaceholder from "./components/DragPlaceholder";
@@ -119,6 +121,7 @@ function AppSidebar() {
                 onClick={handleSearchClick}
               />
               {can.createDocument && <DraftsLink />}
+              <ArrowReviewsLink />
             </Section>
           </Overflow>
           <Scrollable flex shadow>
