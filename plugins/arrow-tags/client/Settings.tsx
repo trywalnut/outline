@@ -66,7 +66,8 @@ function ArrowTagsSettings() {
   const refresh = useCallback(async () => {
     try {
       const res = await client.post("/arrow.tags.list", {});
-      setTags(((res as { tags?: Tag[] }).tags) ?? []);
+      const data = (res as { data?: { tags?: Tag[] } } | null)?.data;
+      setTags(data?.tags ?? []);
     } catch (err) {
       toast.error("Failed to load tags");
     } finally {

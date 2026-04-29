@@ -54,7 +54,8 @@ function ArrowApprovalsSettings() {
     setLoading(true);
     try {
       const res = await client.post("/arrow.reviews.list", { filter });
-      const list = ((res as { reviews?: ReviewRequest[] }).reviews) ?? [];
+      const data = (res as { data?: { reviews?: ReviewRequest[] } } | null)?.data;
+      const list = data?.reviews ?? [];
       setReviews(list);
 
       // Hydrate doc titles in parallel — avoids a server-side join.
@@ -63,9 +64,9 @@ function ArrowApprovalsSettings() {
         list.map(async (r) => {
           try {
             const docRes = await client.post("/documents.info", { id: r.documentId });
-            const d = docRes as { document?: DocSummary };
-            if (d.document) {
-              docMap[r.documentId] = d.document;
+            const docData = (docRes as { data?: DocSummary } | null)?.data;
+            if (docData) {
+              docMap[r.documentId] = docData;
             }
           } catch {
             // ignore — doc may have been archived; row will still render with id

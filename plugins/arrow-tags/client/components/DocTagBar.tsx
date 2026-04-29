@@ -35,7 +35,8 @@ function DocTagBarInner({ documentId, canEdit = false }: Props) {
   const refresh = useCallback(async () => {
     try {
       const res = await client.post("/arrow.documents.tags", { documentId });
-      setApplied(((res as { tags?: Tag[] }).tags) ?? []);
+      const data = (res as { data?: { tags?: Tag[] } } | null)?.data;
+      setApplied(data?.tags ?? []);
     } catch {
       setErrored(true);
     }
@@ -50,7 +51,8 @@ function DocTagBarInner({ documentId, canEdit = false }: Props) {
     void (async () => {
       try {
         const res = await client.post("/arrow.tags.list", {});
-        setAllTags(((res as { tags?: Tag[] }).tags) ?? []);
+        const data = (res as { data?: { tags?: Tag[] } } | null)?.data;
+        setAllTags(data?.tags ?? []);
       } catch {
         // ignore
       }

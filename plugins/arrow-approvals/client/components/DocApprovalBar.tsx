@@ -58,7 +58,8 @@ function DocApprovalBarInner({ documentId }: Props) {
   const refresh = useCallback(async () => {
     try {
       const res = await client.post("/arrow.reviews.info", { documentId });
-      setInfo((res as ReviewInfo | null) ?? null);
+      const data = (res as { data?: ReviewInfo | null } | null)?.data ?? null;
+      setInfo(data);
     } catch (err) {
       // Swallow — render nothing rather than break the doc scene
       setInfo("error");
