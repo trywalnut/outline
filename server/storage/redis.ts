@@ -1,6 +1,6 @@
 import type { RedisOptions } from "ioredis";
 import Redis from "ioredis";
-import defaults from "lodash/defaults";
+import { defaults } from "es-toolkit/compat";
 import env from "@server/env";
 import Logger from "@server/logging/Logger";
 import { getConnectionName } from "./utils";
@@ -114,6 +114,9 @@ export default class RedisAdapter extends Redis {
             }
           });
       }, env.REDIS_HEALTHCHECK_INTERVAL);
+
+      // Don't keep the Node event loop alive solely for the healthcheck.
+      healthcheck.unref();
 
       this.on("end", () => clearInterval(healthcheck));
     }

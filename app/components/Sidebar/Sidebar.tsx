@@ -83,7 +83,7 @@ const Sidebar = React.forwardRef<HTMLDivElement, Props>(function Sidebar_(
         ui.set({ sidebarWidth: Math.max(newWidth, minWidth) });
       }
     },
-    [ui, theme, offset, minWidth, maxWidth, direction]
+    [ui, theme, offset, minWidth, maxWidth, direction, canCollapse]
   );
 
   const handleStopDrag = React.useCallback(() => {
@@ -107,7 +107,7 @@ const Sidebar = React.forwardRef<HTMLDivElement, Props>(function Sidebar_(
     } else {
       ui.set({ sidebarWidth: width });
     }
-  }, [ui, isSmallerThanMinimum, minWidth, width]);
+  }, [ui, isSmallerThanMinimum, minWidth, width, canCollapse]);
 
   const handleBlur = React.useCallback(() => {
     setHovering(false);
@@ -229,7 +229,7 @@ const Sidebar = React.forwardRef<HTMLDivElement, Props>(function Sidebar_(
   );
 
   const handleCloseSidebar = () => {
-    trigger("light");
+    void trigger("light");
     ui.toggleMobileSidebar();
   };
 
@@ -265,7 +265,6 @@ const Sidebar = React.forwardRef<HTMLDivElement, Props>(function Sidebar_(
                   alt={t("Avatar of {{ name }}", { name: user.name })}
                   model={user}
                   size={24}
-                  style={{ marginInlineStart: 4 }}
                 />
               }
             >
@@ -274,6 +273,7 @@ const Sidebar = React.forwardRef<HTMLDivElement, Props>(function Sidebar_(
                   position="bottom"
                   image={<NotificationIcon />}
                   aria-label={t("Notifications")}
+                  style={{ paddingInline: 4 }}
                 />
               </NotificationsPopover>
             </SidebarButton>

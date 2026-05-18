@@ -1,4 +1,4 @@
-import uniq from "lodash/uniq";
+import { uniq } from "es-toolkit/compat";
 import { observer } from "mobx-react";
 import { useMemo, useEffect, useCallback, Suspense } from "react";
 import { Controller, useForm } from "react-hook-form";
@@ -29,7 +29,7 @@ import { useDialogContext } from "~/components/DialogContext";
 
 const IconPicker = createLazyComponent(() => import("~/components/IconPicker"));
 
-export interface FormData {
+export type FormData = {
   name: string;
   icon: string;
   color: string | null;
@@ -37,7 +37,7 @@ export interface FormData {
   permission: CollectionPermission | undefined;
   commenting?: boolean | null;
   templateManagement: CollectionPermission;
-}
+};
 
 const useIconColor = (collection?: Collection) => {
   const { collections } = useStores();

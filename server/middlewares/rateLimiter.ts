@@ -1,5 +1,5 @@
 import type { Next } from "koa";
-import defaults from "lodash/defaults";
+import { defaults } from "es-toolkit/compat";
 import env from "@server/env";
 import { RateLimitExceededError } from "@server/errors";
 import Logger from "@server/logging/Logger";
@@ -75,7 +75,7 @@ export function defaultRateLimiter() {
         ctx.set("RateLimit-Remaining", `${rateLimiterRes.remainingPoints}`);
         ctx.set(
           "RateLimit-Reset",
-          `${new Date(Date.now() + rateLimiterRes.msBeforeNext)}`
+          new Date(Date.now() + rateLimiterRes.msBeforeNext).toString()
         );
 
         Metrics.increment("rate_limit.exceeded", {
@@ -118,12 +118,17 @@ export function rateLimiter(config: RateLimiterConfig) {
     const fullPath = `${ctx.mountPath ?? ""}${ctx.path}`;
 
     if (!RateLimiter.hasRateLimiter(fullPath)) {
+      const points = Math.max(
+        1,
+        Math.round(config.requests * env.RATE_LIMITER_MULTIPLIER)
+      );
+
       RateLimiter.setRateLimiter(
         fullPath,
         defaults(
           {
             ...config,
-            points: config.requests,
+            points,
           },
           {
             duration: 60,

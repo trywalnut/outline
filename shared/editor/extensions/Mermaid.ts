@@ -1,5 +1,5 @@
-import last from "lodash/last";
-import sortBy from "lodash/sortBy";
+import { last, sortBy } from "es-toolkit/compat";
+import { t } from "i18next";
 import { v4 as uuidv4 } from "uuid";
 import type MermaidUnsafe from "mermaid";
 import type { IconPack } from "@fortawesome/fontawesome-common-types";
@@ -168,7 +168,8 @@ class MermaidRenderer {
     renderElement.style.visibility = "hidden";
     renderElement.style.top = "0";
     renderElement.style.left = "0";
-    renderElement.style.width = "100%";
+    const width = this.editor.view?.dom.clientWidth ?? window.innerWidth;
+    renderElement.style.width = `${width}px`;
     renderElement.style.zIndex = "-1";
     document.body.appendChild(renderElement);
 
@@ -294,8 +295,11 @@ function getNewState({
   const decorations: Decoration[] = [];
   let newEditingId: string | undefined;
 
-  // Find all blocks that represent Mermaid diagrams (supports both "mermaid" and "mermaidjs")
-  const blocks = findBlockNodes(doc).filter((item) => isMermaid(item.node));
+  // Find all blocks that represent Mermaid diagrams (supports both "mermaid" and "mermaidjs"),
+  // descending into containers so diagrams inside toggle blocks are also discovered.
+  const blocks = findBlockNodes(doc, true).filter((item) =>
+    isMermaid(item.node)
+  );
 
   blocks.forEach((block) => {
     const existingDecorations = pluginState.decorationSet.find(
@@ -363,7 +367,7 @@ export default function Mermaid({
   isDark: boolean;
   editor: Editor;
 }) {
-  const { onClickLink, dictionary } = editor.props;
+  const { onClickLink } = editor.props;
 
   return new Plugin({
     key: pluginKey,
@@ -591,7 +595,7 @@ export default function Mermaid({
                 onClickLink(sanitizeUrl(href) ?? "");
               }
             } catch (_err) {
-              toast.error(dictionary.openLinkError);
+              toast.error(t("Sorry, that type of link is not supported"));
             }
           }
 

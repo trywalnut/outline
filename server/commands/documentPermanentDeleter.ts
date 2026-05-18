@@ -1,4 +1,4 @@
-import uniq from "lodash/uniq";
+import { chunk, uniq } from "es-toolkit/compat";
 import { Op, QueryTypes } from "sequelize";
 import Logger from "@server/logging/Logger";
 import { Document, Attachment } from "@server/models";
@@ -76,26 +76,52 @@ export default async function documentPermanentDeleter(documents: Document[]) {
     );
   }
 
-  const documentIds = documents.map((document) => document.id);
-  await Document.update(
-    {
-      parentDocumentId: null,
-    },
-    {
-      where: {
-        parentDocumentId: {
-          [Op.in]: documentIds,
-        },
-      },
-      paranoid: false,
-    }
-  );
+  // Number of documents to delete per database statement. Keeps the exclusive
+  // lock window short enough to avoid blocking concurrent web requests that
+  // read from the documents table.
+  const BATCH_SIZE = 100;
 
-  return Document.scope("withDrafts").destroy({
+  const documentIds = documents.map((document) => document.id);
+
+  // Re-check deletedAt in the database to exclude documents that were restored
+  // between the caller's query and now. Otherwise the parentDocumentId clear
+  // below would detach children of a restored parent, breaking the hierarchy.
+  const stillDeleted = await Document.unscoped().findAll({
+    attributes: ["id"],
     where: {
       id: documentIds,
       deletedAt: { [Op.ne]: null },
     },
-    force: true,
+    paranoid: false,
   });
+  const deletedIds = stillDeleted.map((document) => document.id);
+  const batches = chunk(deletedIds, BATCH_SIZE);
+
+  for (const batch of batches) {
+    await Document.update(
+      {
+        parentDocumentId: null,
+      },
+      {
+        where: {
+          parentDocumentId: {
+            [Op.in]: batch,
+          },
+        },
+        paranoid: false,
+      }
+    );
+  }
+
+  let totalDeleted = 0;
+  for (const batch of batches) {
+    totalDeleted += await Document.scope("withDrafts").destroy({
+      where: {
+        id: batch,
+        deletedAt: { [Op.ne]: null },
+      },
+      force: true,
+    });
+  }
+  return totalDeleted;
 }
