@@ -12,6 +12,7 @@ import Document from "@server/models/Document";
 import User from "@server/models/User";
 import IdModel from "@server/models/base/IdModel";
 import Fix from "@server/models/decorators/Fix";
+import ArrowReviewAction from "./ArrowReviewAction";
 
 export type ReviewState =
   | "pending"
@@ -77,7 +78,7 @@ class ArrowReviewRequest extends IdModel<
   @Column(DataType.UUID)
   requestedById: string;
 
-  @HasMany(() => require("./ArrowReviewAction").default, "requestId")
+  @HasMany(() => ArrowReviewAction, "requestId")
   actions: any[];
 }
 

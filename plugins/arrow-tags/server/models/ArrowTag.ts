@@ -13,6 +13,7 @@ import Team from "@server/models/Team";
 import User from "@server/models/User";
 import IdModel from "@server/models/base/IdModel";
 import Fix from "@server/models/decorators/Fix";
+import ArrowDocumentTag from "./ArrowDocumentTag";
 
 /**
  * A tag is a named, color-coded label scoped to a team. Tags are reusable
@@ -61,7 +62,7 @@ class ArrowTag extends IdModel<
   createdById: string;
 
   @BelongsToMany(() => Document, {
-    through: { model: () => require("./ArrowDocumentTag").default },
+    through: { model: () => ArrowDocumentTag },
     foreignKey: "tagId",
     otherKey: "documentId",
   })
