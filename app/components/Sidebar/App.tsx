@@ -19,6 +19,8 @@ import TeamLogo from "../TeamLogo";
 import Tooltip from "../Tooltip";
 import Sidebar from "./Sidebar";
 import ArchiveLink from "./components/ArchiveLink";
+// Arrow fork: top-level Reviews entry surfaces the approvals inbox.
+import ArrowReviewsLink from "../../../plugins/arrow-approvals/client/components/SidebarReviewsLink";
 import Collections from "./components/Collections";
 import { DraftsLink } from "./components/DraftsLink";
 import DragPlaceholder from "./components/DragPlaceholder";
@@ -31,6 +33,7 @@ import SidebarLink from "./components/SidebarLink";
 import Starred from "./components/Starred";
 import ToggleButton from "./components/ToggleButton";
 import TrashLink from "./components/TrashLink";
+import useMobile from "~/hooks/useMobile";
 
 function AppSidebar() {
   const { t } = useTranslation();
@@ -39,6 +42,7 @@ function AppSidebar() {
   const user = useCurrentUser();
   const can = usePolicy(team);
   const history = useHistory();
+  const isMobile = useMobile();
 
   const handleSearchClick = useCallback(() => {
     const basePath = searchPath();
@@ -74,33 +78,29 @@ function AppSidebar() {
           <TeamMenu>
             <SidebarButton
               title={team.name}
-              image={
-                <TeamLogo
-                  model={team}
-                  size={24}
-                  alt={t("Logo")}
-                  style={{ insetInlineStart: 4 }}
-                />
-              }
+              image={<TeamLogo model={team} size={24} alt={t("Logo")} />}
             >
-              <Tooltip
-                content={t("Toggle sidebar")}
-                shortcut={`${metaDisplay}+.`}
-              >
-                <ToggleButton
-                  position="bottom"
-                  image={<SidebarIcon />}
-                  aria-label={
-                    ui.sidebarCollapsed
-                      ? t("Expand sidebar")
-                      : t("Collapse sidebar")
-                  }
-                  onClick={() => {
-                    ui.toggleCollapsedSidebar();
-                    (document.activeElement as HTMLElement)?.blur();
-                  }}
-                />
-              </Tooltip>
+              {isMobile ? null : (
+                <Tooltip
+                  content={t("Toggle sidebar")}
+                  shortcut={`${metaDisplay}+.`}
+                >
+                  <ToggleButton
+                    position="bottom"
+                    image={<SidebarIcon />}
+                    aria-label={
+                      ui.sidebarCollapsed
+                        ? t("Expand sidebar")
+                        : t("Collapse sidebar")
+                    }
+                    style={{ paddingInline: 4 }}
+                    onClick={() => {
+                      ui.toggleCollapsedSidebar();
+                      (document.activeElement as HTMLElement)?.blur();
+                    }}
+                  />
+                </Tooltip>
+              )}
             </SidebarButton>
           </TeamMenu>
           <Overflow>
@@ -119,6 +119,7 @@ function AppSidebar() {
                 onClick={handleSearchClick}
               />
               {can.createDocument && <DraftsLink />}
+              <ArrowReviewsLink />
             </Section>
           </Overflow>
           <Scrollable flex shadow>

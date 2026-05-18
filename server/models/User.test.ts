@@ -15,11 +15,12 @@ import User from "./User";
 import UserMembership from "./UserMembership";
 
 beforeAll(() => {
-  jest.useFakeTimers().setSystemTime(new Date("2018-01-02T00:00:00.000Z"));
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2018-01-02T00:00:00.000Z"));
 });
 
 afterAll(() => {
-  jest.useRealTimers();
+  vi.useRealTimers();
 });
 
 describe("user model", () => {
@@ -152,10 +153,10 @@ describe("user model", () => {
     });
   });
 
-  describe("getJwtToken", () => {
+  describe("getSessionToken", () => {
     it("should set JWT secret", async () => {
       const user = await buildUser();
-      expect(user.getJwtToken()).toBeTruthy();
+      expect(user.getSessionToken()).toBeTruthy();
     });
   });
 

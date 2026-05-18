@@ -78,3 +78,15 @@ export { default as Subscription } from "./Subscription";
 
 export { default as Emoji } from "./Emoji";
 export { default as UserPasskey } from "./UserPasskey";
+
+export { default as AccessRequest } from "./AccessRequest";
+
+// ── Arrow fork additions ─────────────────────────────────────────────────
+// New models live under plugins/arrow-*/server/models/ and are re-exported
+// here so Outline's database init in server/storage/database.ts picks them up
+// via Object.values(models). Keeping the bulk of the code in plugins/ leaves
+// only this single block as a merge surface against upstream.
+export { default as ArrowTag } from "../../plugins/arrow-tags/server/models/ArrowTag";
+export { default as ArrowDocumentTag } from "../../plugins/arrow-tags/server/models/ArrowDocumentTag";
+export { default as ArrowReviewRequest } from "../../plugins/arrow-approvals/server/models/ArrowReviewRequest";
+export { default as ArrowReviewAction } from "../../plugins/arrow-approvals/server/models/ArrowReviewAction";

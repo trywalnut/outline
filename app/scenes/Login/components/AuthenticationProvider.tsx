@@ -11,7 +11,7 @@ import PluginIcon from "~/components/PluginIcon";
 import Tooltip from "~/components/Tooltip";
 import { client } from "~/utils/ApiClient";
 import Desktop from "~/utils/Desktop";
-import { getRedirectUrl } from "../urls";
+import { getRedirectUrl } from "~/utils/urls";
 import { CSRF } from "@shared/constants";
 import { getCookie } from "tiny-cookie";
 
@@ -32,7 +32,8 @@ function AuthenticationProvider(props: Props) {
   const [isSubmitting, setSubmitting] = React.useState(false);
   const [email, setEmail] = React.useState("");
   const formRef = React.useRef<HTMLFormElement>(null);
-  const { isCreate, id, name, authUrl, onEmailSuccess, ...rest } = props;
+  const { isCreate, id, name, authUrl, onEmailSuccess, preferOTP, ...rest } =
+    props;
   const clientType = Desktop.isElectron() ? Client.Desktop : Client.Web;
 
   const handleChangeEmail = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -51,7 +52,7 @@ function AuthenticationProvider(props: Props) {
         const response = await client.post(event.currentTarget.action, {
           email,
           client: clientType,
-          preferOTP: props.preferOTP,
+          preferOTP,
         });
 
         if (response.redirect) {
@@ -104,7 +105,7 @@ function AuthenticationProvider(props: Props) {
                 const input = document.createElement("input");
                 input.type = "hidden";
                 input.name = fieldName;
-                input.value = String(value);
+                input.value = String(value as string | number | boolean);
                 formRef.current?.appendChild(input);
               }
             });

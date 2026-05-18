@@ -1,0 +1,6 @@
+{
+  "id": "arrow-reminders",
+  "name": "Arrow Reminders",
+  "priority": 200,
+  "description": "Daily Slack DM digests for pending review requests."
+}

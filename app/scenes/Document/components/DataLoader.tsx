@@ -222,6 +222,7 @@ function DataLoader({ match, children }: Props) {
     shares,
     ui,
     revisionId,
+    missingPolicy,
   ]);
 
   // Auto-enter presentation mode when ?present=true query param is set
@@ -237,7 +238,7 @@ function DataLoader({ match, children }: Props) {
     ) : error instanceof PaymentRequiredError ? (
       <Error402 />
     ) : error instanceof AuthorizationError ? (
-      <Error403 />
+      <Error403 documentId={documentSlug} />
     ) : error instanceof NotFoundError ? (
       <Error404 />
     ) : (

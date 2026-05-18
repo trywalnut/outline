@@ -1,0 +1,64 @@
+name: Build & push arrow image
+
+# Builds the arrow fork and pushes to ECR. Uses plain `docker build`
+# (default driver) so the base image lives in the local daemon and can
+# be referenced by tag in the runtime build.
+#
+# Auth via GitHub OIDC → IAM role github-actions-arrow-outline (no
+# long-lived secrets).
+
+on:
+  push:
+    branches: [arrow]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: 622608717163.dkr.ecr.us-east-1.amazonaws.com
+  ECR_REPOSITORY: arrow-outline
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::622608717163:role/github-actions-arrow-outline
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build base image
+        run: |
+          docker build \
+            -f Dockerfile.base \
+            -t outline-arrow-base:${{ github.sha }} \
+            .
+
+      - name: Build runtime image
+        run: |
+          docker build \
+            -f Dockerfile \
+            --build-arg BASE_IMAGE=outline-arrow-base:${{ github.sha }} \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }} \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:arrow-latest \
+            .
+
+      - name: Push to ECR
+        run: |
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }}
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:arrow-latest
+
+      - name: Output image URI
+        run: |
+          echo "Pushed: $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }}"
+          echo "Pushed: $ECR_REGISTRY/$ECR_REPOSITORY:arrow-latest"

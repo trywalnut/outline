@@ -1,5 +1,4 @@
-import deburr from "lodash/deburr";
-import escapeRegExp from "lodash/escapeRegExp";
+import { deburr, escapeRegExp } from "es-toolkit/compat";
 import { observable } from "mobx";
 import type { Node } from "prosemirror-model";
 import type { Command } from "prosemirror-state";
@@ -18,12 +17,22 @@ const pluginKey = new PluginKey("find-and-replace");
 const supportsHighlightAPI =
   typeof CSS !== "undefined" && CSS.highlights !== undefined;
 
-export default class FindAndReplaceExtension extends Extension {
+/**
+ * Options for the FindAndReplace extension.
+ */
+type FindAndReplaceOptions = {
+  /** Whether the search should be case sensitive by default. */
+  caseSensitive: boolean;
+  /** Whether the search query should be interpreted as a regular expression by default. */
+  regexEnabled: boolean;
+};
+
+export default class FindAndReplaceExtension extends Extension<FindAndReplaceOptions> {
   public get name() {
     return "find-and-replace";
   }
 
-  public get defaultOptions() {
+  public get defaultOptions(): FindAndReplaceOptions {
     return {
       caseSensitive: false,
       regexEnabled: false,
@@ -154,6 +163,7 @@ export default class FindAndReplaceExtension extends Extension {
 
       dispatch?.(state.tr.setMeta(pluginKey, {}));
       this.expandFoldedTogglesForCurrentMatch();
+      this.expandCollapsedCodeBlockForCurrentMatch();
       this.scrollToCurrentMatch();
 
       return true;
@@ -204,6 +214,7 @@ export default class FindAndReplaceExtension extends Extension {
 
       dispatch?.(state.tr.setMeta(pluginKey, {}));
       this.expandFoldedTogglesForCurrentMatch();
+      this.expandCollapsedCodeBlockForCurrentMatch();
       this.scrollToCurrentMatch();
       return true;
     };
@@ -287,6 +298,18 @@ export default class FindAndReplaceExtension extends Extension {
         );
       }
     });
+  }
+
+  /**
+   * Expand a collapsed code block if it contains the current match.
+   */
+  private expandCollapsedCodeBlockForCurrentMatch() {
+    const result = this.results[this.currentResultIndex];
+    if (!result) {
+      return;
+    }
+
+    this.editor.commands.expandCodeBlockAt(result.from);
   }
 
   private rebaseNextResult(replace: string, index: number, lastOffset = 0) {
@@ -402,13 +425,14 @@ export default class FindAndReplaceExtension extends Extension {
    */
   private get decorations() {
     return this.results.map((deco, index) => {
-      const decorationType =
-        deco.type === "node" ? Decoration.node : Decoration.inline;
-      return decorationType(deco.from, deco.to, {
+      const attrs = {
         class:
           "find-result" +
           (this.currentResultIndex === index ? " current-result" : ""),
-      });
+      };
+      return deco.type === "node"
+        ? Decoration.node(deco.from, deco.to, attrs)
+        : Decoration.inline(deco.from, deco.to, attrs);
     });
   }
 
