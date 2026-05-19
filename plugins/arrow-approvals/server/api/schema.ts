@@ -24,7 +24,9 @@ export const ReviewsRequestChangesSchema = BaseSchema.extend({
     comment: z.string().min(1, "comment_required"),
   }),
 });
-export type ReviewsRequestChangesReq = z.infer<typeof ReviewsRequestChangesSchema>;
+export type ReviewsRequestChangesReq = z.infer<
+  typeof ReviewsRequestChangesSchema
+>;
 
 export const ReviewsCancelSchema = BaseSchema.extend({
   body: z.object({ requestId: z.string().uuid() }),
@@ -46,6 +48,13 @@ export const ReviewsInfoSchema = BaseSchema.extend({
 });
 export type ReviewsInfoReq = z.infer<typeof ReviewsInfoSchema>;
 
+export const ReviewsCollectionDashboardSchema = BaseSchema.extend({
+  body: z.object({ collectionId: z.string().uuid() }),
+});
+export type ReviewsCollectionDashboardReq = z.infer<
+  typeof ReviewsCollectionDashboardSchema
+>;
+
 export const ReviewsListSchema = BaseSchema.extend({
   body: z.object({
     filter: z.enum(["awaiting_me", "my_pending"]),
@@ -60,4 +69,6 @@ export const ReviewsEditReviewersSchema = BaseSchema.extend({
     threshold: z.number().int().optional(),
   }),
 });
-export type ReviewsEditReviewersReq = z.infer<typeof ReviewsEditReviewersSchema>;
+export type ReviewsEditReviewersReq = z.infer<
+  typeof ReviewsEditReviewersSchema
+>;

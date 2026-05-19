@@ -1,7 +1,7 @@
-import type { Transaction } from "sequelize";
+import { Op, type Transaction } from "sequelize";
 import httpErrors from "http-errors";
-import Document from "@server/models/Document";
-import User from "@server/models/User";
+import type Document from "@server/models/Document";
+import type User from "@server/models/User";
 import ArrowReviewAction, {
   type ReviewActionType,
 } from "../models/ArrowReviewAction";
@@ -76,7 +76,8 @@ export class ApprovalEngine {
         requiredReviewers: reviewerIds,
         threshold,
         state: "pending",
-        revisionId: (document as unknown as { revisionId?: string }).revisionId ?? null,
+        revisionId:
+          (document as unknown as { revisionId?: string }).revisionId ?? null,
       },
       { transaction }
     );
@@ -88,7 +89,12 @@ export class ApprovalEngine {
    * otherwise stays `pending`.
    */
   static async approve(
-    args: { request: ArrowReviewRequest; reviewer: User; comment?: string; document: Document },
+    args: {
+      request: ArrowReviewRequest;
+      reviewer: User;
+      comment?: string;
+      document: Document;
+    },
     transaction: Transaction
   ): Promise<{ request: ArrowReviewRequest; transitionedToApproved: boolean }> {
     const { request, reviewer, comment, document } = args;
@@ -100,12 +106,17 @@ export class ApprovalEngine {
         userId: reviewer.id,
         action: "approve",
         body: comment ?? null,
-        revisionId: (document as unknown as { revisionId?: string }).revisionId ?? null,
+        revisionId:
+          (document as unknown as { revisionId?: string }).revisionId ?? null,
       },
       { transaction }
     );
 
-    const approvalCount = await this.countActions(request.id, "approve", transaction);
+    const approvalCount = await this.countActions(
+      request.id,
+      "approve",
+      transaction
+    );
     if (approvalCount >= request.threshold) {
       request.state = "approved";
       request.completedAt = new Date();
@@ -121,7 +132,12 @@ export class ApprovalEngine {
    * fresh (matches "prior approvals reset on changes_requested" scenario).
    */
   static async requestChanges(
-    args: { request: ArrowReviewRequest; reviewer: User; comment: string; document: Document },
+    args: {
+      request: ArrowReviewRequest;
+      reviewer: User;
+      comment: string;
+      document: Document;
+    },
     transaction: Transaction
   ): Promise<ArrowReviewRequest> {
     const { request, reviewer, comment, document } = args;
@@ -139,7 +155,8 @@ export class ApprovalEngine {
         userId: reviewer.id,
         action: "request_changes",
         body: comment,
-        revisionId: (document as unknown as { revisionId?: string }).revisionId ?? null,
+        revisionId:
+          (document as unknown as { revisionId?: string }).revisionId ?? null,
       },
       { transaction }
     );
@@ -234,12 +251,14 @@ export class ApprovalEngine {
         requestId: request.id,
         userId: actor.id,
         action: "re_request",
-        revisionId: (document as unknown as { revisionId?: string }).revisionId ?? null,
+        revisionId:
+          (document as unknown as { revisionId?: string }).revisionId ?? null,
       },
       { transaction }
     );
     request.state = "pending";
-    request.revisionId = (document as unknown as { revisionId?: string }).revisionId ?? null;
+    request.revisionId =
+      (document as unknown as { revisionId?: string }).revisionId ?? null;
     await request.save({ transaction });
     return request;
   }
@@ -280,7 +299,8 @@ export class ApprovalEngine {
         isReportable: false,
       });
     }
-    const newThreshold = threshold ?? Math.min(request.threshold, reviewerIds.length);
+    const newThreshold =
+      threshold ?? Math.min(request.threshold, reviewerIds.length);
     if (newThreshold < 1) {
       throw httpErrors(400, "threshold must be at least 1", {
         id: "invalid_threshold",
@@ -339,7 +359,7 @@ export class ApprovalEngine {
   private static async assertActionableBy(
     request: ArrowReviewRequest,
     reviewer: User,
-    action: ReviewActionType
+    _action: ReviewActionType
   ): Promise<void> {
     if (reviewer.id === request.requestedById) {
       throw httpErrors(403, "author cannot approve own review", {
@@ -360,11 +380,17 @@ export class ApprovalEngine {
       });
     }
     // Already-acted check.
+    const roundStartedAt = await this.currentRoundStartedAt(request.id);
     const existing = await ArrowReviewAction.findOne({
       where: {
         requestId: request.id,
         userId: reviewer.id,
         action: ["approve", "request_changes"],
+        ...(roundStartedAt && {
+          createdAt: {
+            [Op.gte]: roundStartedAt,
+          },
+        }),
       },
     });
     if (existing) {
@@ -380,10 +406,35 @@ export class ApprovalEngine {
     action: ReviewActionType,
     transaction: Transaction
   ): Promise<number> {
+    const roundStartedAt = await this.currentRoundStartedAt(
+      requestId,
+      transaction
+    );
     return ArrowReviewAction.count({
-      where: { requestId, action },
+      where: {
+        requestId,
+        action,
+        ...(roundStartedAt && {
+          createdAt: {
+            [Op.gte]: roundStartedAt,
+          },
+        }),
+      },
       transaction,
     });
+  }
+
+  private static async currentRoundStartedAt(
+    requestId: string,
+    transaction?: Transaction
+  ): Promise<Date | null> {
+    const reRequest = await ArrowReviewAction.findOne({
+      where: { requestId, action: "re_request" },
+      order: [["createdAt", "DESC"]],
+      transaction,
+    });
+
+    return reRequest?.createdAt ?? null;
   }
 
   /**

@@ -8,6 +8,13 @@ type ReviewState = "pending" | "approved" | "changes_requested" | "cancelled";
 
 type ReviewInfo = {
   state: ReviewState;
+  isStale?: boolean;
+  staleReason?:
+    | "edited_after_approval"
+    | "review_expired"
+    | "never_reviewed"
+    | null;
+  daysSinceReview?: number | null;
 };
 
 type DocumentStatus =
@@ -15,7 +22,8 @@ type DocumentStatus =
   | "published"
   | "in_review"
   | "changes_requested"
-  | "approved";
+  | "approved"
+  | "stale";
 
 type Props = {
   documentId: string;
@@ -96,6 +104,10 @@ function getDocumentStatus(
     return "draft";
   }
 
+  if (review?.isStale) {
+    return "stale";
+  }
+
   if (review?.state === "approved") {
     return "approved";
   }
@@ -123,6 +135,8 @@ function getStatusLabel(status: DocumentStatus) {
       return "Needs changes";
     case "approved":
       return "Approved";
+    case "stale":
+      return "Stale review";
   }
 }
 
@@ -143,6 +157,8 @@ const Dot = styled.span<{ $status: DocumentStatus }>`
         return props.theme.danger;
       case "approved":
         return props.theme.success;
+      case "stale":
+        return props.theme.warning;
     }
   }};
   box-shadow: 0 0 0 2px ${s("sidebarBackground")};

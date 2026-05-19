@@ -19,6 +19,7 @@ import useCurrentUser from "~/hooks/useCurrentUser";
 import usePolicy from "~/hooks/usePolicy";
 import useStores from "~/hooks/useStores";
 import type { Properties } from "~/types";
+import CollectionDashboard from "./CollectionDashboard";
 
 const extensions = withUIExtensions(richExtensions);
 
@@ -90,6 +91,7 @@ function Overview({ collection, readOnly }: Props) {
       {(can.update || readOnly) && (
         <Suspense fallback={<Placeholder>Loading…</Placeholder>}>
           <MeasuredContainer name="document">
+            <CollectionDashboard collection={collection} />
             <Editor
               defaultValue={collection.data}
               onChange={handleSave}

@@ -1,12 +1,13 @@
 import Router from "koa-router";
-import { Op } from "sequelize";
+import { Op, type Transaction } from "sequelize";
 import httpErrors from "http-errors";
-import { Document } from "@server/models";
+import { Collection, Document } from "@server/models";
 import auth from "@server/middlewares/authentication";
 import { transaction } from "@server/middlewares/transaction";
 import validate from "@server/middlewares/validate";
 import { authorize } from "@server/policies";
 import type { APIContext } from "@server/types";
+import ArrowDocumentTag from "../../../arrow-tags/server/models/ArrowDocumentTag";
 import ArrowReviewAction from "../models/ArrowReviewAction";
 import ArrowReviewRequest from "../models/ArrowReviewRequest";
 import {
@@ -17,6 +18,7 @@ import { ApprovalEngine } from "../services/ApprovalEngine";
 import {
   ReviewsApproveSchema,
   ReviewsCancelSchema,
+  ReviewsCollectionDashboardSchema,
   ReviewsEditReviewersSchema,
   ReviewsInfoSchema,
   ReviewsListSchema,
@@ -26,6 +28,7 @@ import {
   ReviewsUnlockSchema,
   type ReviewsApproveReq,
   type ReviewsCancelReq,
+  type ReviewsCollectionDashboardReq,
   type ReviewsEditReviewersReq,
   type ReviewsInfoReq,
   type ReviewsListReq,
@@ -36,6 +39,21 @@ import {
 } from "./schema";
 
 const router = new Router();
+
+const StaleThresholds = [30, 60, 90] as const;
+
+type StaleMeta = {
+  documentUpdatedAt: string;
+  lastReviewedAt: string | null;
+  daysSinceReview: number | null;
+  staleThresholdDays: number;
+  isStale: boolean;
+  staleReason:
+    | "edited_after_approval"
+    | "review_expired"
+    | "never_reviewed"
+    | null;
+};
 
 router.post(
   "arrow.reviews.request",
@@ -77,14 +95,18 @@ router.post(
     const { transaction: tx } = ctx.state;
     const { requestId, comment } = ctx.input.body;
 
-    const request = await ArrowReviewRequest.findByPk(requestId, { transaction: tx });
+    const request = await ArrowReviewRequest.findByPk(requestId, {
+      transaction: tx,
+    });
     if (!request) {
       throw httpErrors(404, "review not found", {
         id: "not_found",
         isReportable: false,
       });
     }
-    const document = await Document.findByPk(request.documentId, { transaction: tx });
+    const document = await Document.findByPk(request.documentId, {
+      transaction: tx,
+    });
     if (!document) {
       throw httpErrors(404, "document not found", {
         id: "not_found",
@@ -96,10 +118,7 @@ router.post(
       { request, reviewer: user, comment, document },
       tx
     );
-    const approvals = await ArrowReviewAction.count({
-      where: { requestId, action: "approve" },
-      transaction: tx,
-    });
+    const approvals = await countCurrentApprovals(requestId, tx);
     ctx.body = {
       data: {
         ...presentReviewRequest(result.request, approvals),
@@ -119,14 +138,18 @@ router.post(
     const { transaction: tx } = ctx.state;
     const { requestId, comment } = ctx.input.body;
 
-    const request = await ArrowReviewRequest.findByPk(requestId, { transaction: tx });
+    const request = await ArrowReviewRequest.findByPk(requestId, {
+      transaction: tx,
+    });
     if (!request) {
       throw httpErrors(404, "review not found", {
         id: "not_found",
         isReportable: false,
       });
     }
-    const document = await Document.findByPk(request.documentId, { transaction: tx });
+    const document = await Document.findByPk(request.documentId, {
+      transaction: tx,
+    });
     if (!document) {
       throw httpErrors(404, "document not found", {
         id: "not_found",
@@ -152,7 +175,9 @@ router.post(
     const { transaction: tx } = ctx.state;
     const { requestId } = ctx.input.body;
 
-    const request = await ArrowReviewRequest.findByPk(requestId, { transaction: tx });
+    const request = await ArrowReviewRequest.findByPk(requestId, {
+      transaction: tx,
+    });
     if (!request) {
       throw httpErrors(404, "review not found", {
         id: "not_found",
@@ -209,7 +234,9 @@ router.post(
     const { transaction: tx } = ctx.state;
     const { requestId, reviewers, threshold } = ctx.input.body;
 
-    const request = await ArrowReviewRequest.findByPk(requestId, { transaction: tx });
+    const request = await ArrowReviewRequest.findByPk(requestId, {
+      transaction: tx,
+    });
     if (!request) {
       throw httpErrors(404, "review not found", {
         id: "not_found",
@@ -221,10 +248,7 @@ router.post(
       { request, actor: user, reviewerIds: reviewers, threshold },
       tx
     );
-    const approvals = await ArrowReviewAction.count({
-      where: { requestId, action: "approve" },
-      transaction: tx,
-    });
+    const approvals = await countCurrentApprovals(requestId, tx);
     ctx.body = { data: presentReviewRequest(updated, approvals) };
   }
 );
@@ -260,7 +284,17 @@ router.post(
   auth(),
   validate(ReviewsInfoSchema),
   async (ctx: APIContext<ReviewsInfoReq>) => {
+    const { user } = ctx.state.auth;
     const { documentId } = ctx.input.body;
+    const document = await Document.findByPk(documentId, { userId: user.id });
+    if (!document) {
+      throw httpErrors(404, "document not found", {
+        id: "not_found",
+        isReportable: false,
+      });
+    }
+    authorize(user, "read", document);
+
     const request = await ArrowReviewRequest.findOne({
       where: {
         documentId,
@@ -272,17 +306,133 @@ router.post(
       ctx.body = { data: null };
       return;
     }
-    const approvals = await ArrowReviewAction.count({
-      where: { requestId: request.id, action: "approve" },
-    });
+    const approvals = await countCurrentApprovals(request.id);
     const actions = await ArrowReviewAction.findAll({
       where: { requestId: request.id },
       order: [["createdAt", "ASC"]],
     });
+    const tags = await getDocumentTagNames([document.id]);
+    const staleMeta = buildStaleMeta({
+      document,
+      request,
+      collectionName: document.collection?.name,
+      tags: tags.get(document.id) ?? [],
+    });
+
     ctx.body = {
       data: {
         ...presentReviewRequest(request, approvals),
         actions: actions.map(presentReviewAction),
+        ...staleMeta,
+      },
+    };
+  }
+);
+
+router.post(
+  "arrow.reviews.collectionDashboard",
+  auth(),
+  validate(ReviewsCollectionDashboardSchema),
+  async (ctx: APIContext<ReviewsCollectionDashboardReq>) => {
+    const { user } = ctx.state.auth;
+    const { collectionId } = ctx.input.body;
+    const collection = await Collection.findByPk(collectionId, {
+      userId: user.id,
+    });
+
+    if (!collection) {
+      throw httpErrors(404, "collection not found", {
+        id: "not_found",
+        isReportable: false,
+      });
+    }
+    authorize(user, "readDocument", collection);
+
+    const documents = await Document.scope([
+      "withDrafts",
+      "withoutState",
+    ]).findAll({
+      where: {
+        collectionId,
+        teamId: user.teamId,
+        archivedAt: null,
+        deletedAt: null,
+        [Op.or]: [{ publishedAt: { [Op.ne]: null } }, { createdById: user.id }],
+      },
+      order: [["updatedAt", "DESC"]],
+      limit: 200,
+    });
+    const documentIds = documents.map((document) => document.id);
+    const requests = await ArrowReviewRequest.findAll({
+      where: { documentId: { [Op.in]: documentIds } },
+      order: [["createdAt", "DESC"]],
+    });
+    const tagNames = await getDocumentTagNames(documentIds);
+    const latestByDocumentId = new Map<string, ArrowReviewRequest>();
+
+    for (const request of requests) {
+      if (!latestByDocumentId.has(request.documentId)) {
+        latestByDocumentId.set(request.documentId, request);
+      }
+    }
+
+    const summaries = await Promise.all(
+      documents.map(async (document) => {
+        const request = latestByDocumentId.get(document.id) ?? null;
+        const approvalsCount = request
+          ? await countCurrentApprovals(request.id)
+          : 0;
+        const stale = buildStaleMeta({
+          document,
+          request,
+          collectionName: collection.name,
+          tags: tagNames.get(document.id) ?? [],
+        });
+
+        return {
+          document: presentDashboardDocument(document),
+          review: request
+            ? presentReviewRequest(request, approvalsCount)
+            : null,
+          ...stale,
+        };
+      })
+    );
+
+    const needingReview = summaries
+      .filter(
+        (item) =>
+          item.review?.state === "pending" ||
+          item.review?.state === "changes_requested"
+      )
+      .slice(0, 6);
+    const recentlyApproved = summaries
+      .filter((item) => item.review?.state === "approved" && !item.isStale)
+      .sort(
+        (a, b) =>
+          new Date(b.lastReviewedAt ?? 0).getTime() -
+          new Date(a.lastReviewedAt ?? 0).getTime()
+      )
+      .slice(0, 6);
+    const stale = summaries
+      .filter((item) => item.isStale)
+      .sort((a, b) => (b.daysSinceReview ?? 9999) - (a.daysSinceReview ?? 9999))
+      .slice(0, 6);
+    const mostViewed = summaries
+      .filter((item) => item.document.publishedAt)
+      .sort((a, b) => b.document.popularityScore - a.document.popularityScore)
+      .slice(0, 6);
+    const newDrafts = summaries
+      .filter((item) => !item.document.publishedAt)
+      .slice(0, 6);
+
+    ctx.body = {
+      data: {
+        needingReview,
+        recentlyApproved,
+        stale,
+        mostViewed,
+        newDrafts,
       },
     };
   }
@@ -326,14 +476,158 @@ router.post(
 
     const items = await Promise.all(
       requests.map(async (r) => {
-        const approvals = await ArrowReviewAction.count({
-          where: { requestId: r.id, action: "approve" },
-        });
+        const approvals = await countCurrentApprovals(r.id);
         return presentReviewRequest(r, approvals);
       })
     );
     ctx.body = { data: { reviews: items } };
   }
 );
+
+function presentDashboardDocument(document: Document) {
+  return {
+    id: document.id,
+    title: document.title || "Untitled",
+    url: document.path,
+    urlId: document.urlId,
+    collectionId: document.collectionId,
+    updatedAt: document.updatedAt.toISOString(),
+    publishedAt: document.publishedAt
+      ? document.publishedAt.toISOString()
+      : null,
+    popularityScore: document.popularityScore ?? 0,
+  };
+}
+
+function buildStaleMeta({
+  document,
+  request,
+  collectionName,
+  tags,
+}: {
+  document: Document;
+  request: ArrowReviewRequest | null;
+  collectionName?: string;
+  tags: string[];
+}): StaleMeta {
+  const threshold = getStaleThresholdDays(collectionName, tags);
+  const lastReviewedAt = request?.completedAt ?? null;
+  const daysSinceReview = lastReviewedAt
+    ? Math.max(
+        0,
+        Math.floor((Date.now() - lastReviewedAt.getTime()) / 86_400_000)
+      )
+    : null;
+  const editedAfterApproval =
+    request?.state === "approved" &&
+    !!lastReviewedAt &&
+    document.updatedAt.getTime() > lastReviewedAt.getTime() + 60_000;
+  const reviewExpired =
+    !!lastReviewedAt &&
+    daysSinceReview !== null &&
+    daysSinceReview >= threshold;
+  const neverReviewed = !lastReviewedAt && !!document.publishedAt;
+  const isStale = editedAfterApproval || reviewExpired || neverReviewed;
+
+  return {
+    documentUpdatedAt: document.updatedAt.toISOString(),
+    lastReviewedAt: lastReviewedAt ? lastReviewedAt.toISOString() : null,
+    daysSinceReview,
+    staleThresholdDays: threshold,
+    isStale,
+    staleReason: editedAfterApproval
+      ? "edited_after_approval"
+      : reviewExpired
+        ? "review_expired"
+        : neverReviewed
+          ? "never_reviewed"
+          : null,
+  };
+}
+
+function getStaleThresholdDays(
+  collectionName: string | undefined,
+  tags: string[]
+) {
+  const signals = [collectionName ?? "", ...tags].map((value) =>
+    value.toLowerCase()
+  );
+
+  for (const threshold of StaleThresholds) {
+    if (
+      signals.some((signal) =>
+        new RegExp(`(?:stale|review|freshness)[\\s:_-]*${threshold}\\b`).test(
+          signal
+        )
+      )
+    ) {
+      return threshold;
+    }
+  }
+
+  if (
+    signals.some((signal) =>
+      /\b(critical|runbook|onboarding|monthly|30d)\b/.test(signal)
+    )
+  ) {
+    return 30;
+  }
+
+  if (
+    signals.some((signal) =>
+      /\b(reference|archive|evergreen|quarterly|90d)\b/.test(signal)
+    )
+  ) {
+    return 90;
+  }
+
+  return 60;
+}
+
+async function getDocumentTagNames(documentIds: string[]) {
+  const map = new Map<string, string[]>();
+  if (documentIds.length === 0) {
+    return map;
+  }
+
+  const links = await ArrowDocumentTag.findAll({
+    where: { documentId: { [Op.in]: documentIds } },
+    include: [{ association: "tag" }],
+  });
+
+  for (const link of links) {
+    const list = map.get(link.documentId) ?? [];
+    if (link.tag?.name) {
+      list.push(link.tag.name);
+    }
+    map.set(link.documentId, list);
+  }
+
+  return map;
+}
+
+async function countCurrentApprovals(
+  requestId: string,
+  transaction?: Transaction
+) {
+  const reRequest = await ArrowReviewAction.findOne({
+    where: { requestId, action: "re_request" },
+    order: [["createdAt", "DESC"]],
+    transaction,
+  });
+
+  return ArrowReviewAction.count({
+    where: {
+      requestId,
+      action: "approve",
+      ...(reRequest && {
+        createdAt: {
+          [Op.gte]: reRequest.createdAt,
+        },
+      }),
+    },
+    transaction,
+  });
+}
 
 export default router;

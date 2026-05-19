@@ -53,6 +53,16 @@ interface ReviewInfo {
   createdAt: string;
   completedAt: string | null;
   actions?: ReviewAction[];
+  documentUpdatedAt?: string;
+  lastReviewedAt?: string | null;
+  daysSinceReview?: number | null;
+  staleThresholdDays?: number;
+  isStale?: boolean;
+  staleReason?:
+    | "edited_after_approval"
+    | "review_expired"
+    | "never_reviewed"
+    | null;
 }
 
 interface Props {
@@ -62,10 +72,12 @@ interface Props {
 function DocApprovalBarInner({ documentId }: Props) {
   const currentUser = useCurrentUser();
   const { users } = useStores();
-  const [info, setInfo] = useState<ReviewInfo | null | "loading" | "error">("loading");
+  const [info, setInfo] = useState<ReviewInfo | null | "loading" | "error">(
+    "loading"
+  );
   const [pickerOpen, setPickerOpen] = useState(false);
   const [editPickerOpen, setEditPickerOpen] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -82,22 +94,22 @@ function DocApprovalBarInner({ documentId }: Props) {
     void refresh();
   }, [refresh]);
 
-  const handleApprove = useCallback(
-    async () => {
-      if (!info || typeof info === "string") {
-        return;
-      }
-      const comment = window.prompt("Optional approval comment:") ?? undefined;
-      try {
-        await client.post("/arrow.reviews.approve", { requestId: info.id, comment });
-        toast.success("Approved");
-        await refresh();
-      } catch (err) {
-        toast.error((err as { message?: string }).message ?? "Approve failed");
-      }
-    },
-    [info, refresh]
-  );
+  const handleApprove = useCallback(async () => {
+    if (!info || typeof info === "string") {
+      return;
+    }
+    const comment = window.prompt("Optional approval comment:") ?? undefined;
+    try {
+      await client.post("/arrow.reviews.approve", {
+        requestId: info.id,
+        comment,
+      });
+      toast.success("Approved");
+      await refresh();
+    } catch (err) {
+      toast.error((err as { message?: string }).message ?? "Approve failed");
+    }
+  }, [info, refresh]);
 
   const handleRequestChanges = useCallback(async () => {
     if (!info || typeof info === "string") {
@@ -109,7 +121,8 @@ function DocApprovalBarInner({ documentId }: Props) {
     }
     try {
       await client.post("/arrow.reviews.requestChanges", {
-        requestId: info.id, comment,
+        requestId: info.id,
+        comment,
       });
       toast.success("Changes requested");
       await refresh();
@@ -145,7 +158,11 @@ function DocApprovalBarInner({ documentId }: Props) {
   }, [documentId, refresh]);
 
   const handleUnlock = useCallback(async () => {
-    if (!window.confirm("Unlock this document for further edits? The prior approval is preserved as historical.")) {
+    if (
+      !window.confirm(
+        "Unlock this document for further edits? The prior approval is preserved as historical."
+      )
+    ) {
       return;
     }
     try {
@@ -157,39 +174,54 @@ function DocApprovalBarInner({ documentId }: Props) {
     }
   }, [documentId, refresh]);
 
-  const handleRequestReview = useCallback(async (reviewerIds: string[], threshold: number) => {
-    try {
-      await client.post("/arrow.reviews.request", {
-        documentId, reviewers: reviewerIds, threshold,
-      });
-      toast.success("Review requested");
-      setPickerOpen(false);
-      await refresh();
-    } catch (err) {
-      toast.error((err as { message?: string }).message ?? "Failed to request review");
-    }
-  }, [documentId, refresh]);
+  const handleRequestReview = useCallback(
+    async (reviewerIds: string[], threshold: number) => {
+      try {
+        await client.post("/arrow.reviews.request", {
+          documentId,
+          reviewers: reviewerIds,
+          threshold,
+        });
+        toast.success("Review requested");
+        setPickerOpen(false);
+        await refresh();
+      } catch (err) {
+        toast.error(
+          (err as { message?: string }).message ?? "Failed to request review"
+        );
+      }
+    },
+    [documentId, refresh]
+  );
 
-  const handleEditReviewers = useCallback(async (reviewerIds: string[], threshold: number) => {
-    if (!info || typeof info === "string") {
-      return;
-    }
-    try {
-      await client.post("/arrow.reviews.editReviewers", {
-        requestId: info.id, reviewers: reviewerIds, threshold,
-      });
-      toast.success("Reviewers updated");
-      setEditPickerOpen(false);
-      await refresh();
-    } catch (err) {
-      toast.error((err as { message?: string }).message ?? "Failed to update reviewers");
-    }
-  }, [info, refresh]);
+  const handleEditReviewers = useCallback(
+    async (reviewerIds: string[], threshold: number) => {
+      if (!info || typeof info === "string") {
+        return;
+      }
+      try {
+        await client.post("/arrow.reviews.editReviewers", {
+          requestId: info.id,
+          reviewers: reviewerIds,
+          threshold,
+        });
+        toast.success("Reviewers updated");
+        setEditPickerOpen(false);
+        await refresh();
+      } catch (err) {
+        toast.error(
+          (err as { message?: string }).message ?? "Failed to update reviewers"
+        );
+      }
+    },
+    [info, refresh]
+  );
 
   // ── derived values (must be computed before any conditional returns
   // so React hook order stays stable across renders) ──
   const reviewers = useMemo(
-    () => (info && typeof info !== "string" ? info.requiredReviewers ?? [] : []),
+    () =>
+      info && typeof info !== "string" ? (info.requiredReviewers ?? []) : [],
     [info]
   );
 
@@ -200,8 +232,9 @@ function DocApprovalBarInner({ documentId }: Props) {
     if (info.state !== "pending") {
       return null;
     }
+    const actions = currentRoundActions(info.actions ?? []);
     const actedIds = new Set(
-      (info.actions ?? [])
+      actions
         .filter((a) => a.action === "approve" || a.action === "request_changes")
         .map((a) => a.userId)
     );
@@ -265,30 +298,45 @@ function DocApprovalBarInner({ documentId }: Props) {
   const isAuthor = info.requestedById === currentUser.id;
   const isReviewer = reviewers.includes(currentUser.id);
   const hasActed = (info.actions ?? []).some(
-    (a) => a.userId === currentUser.id && (a.action === "approve" || a.action === "request_changes")
+    (a) =>
+      a.userId === currentUser.id &&
+      (a.action === "approve" || a.action === "request_changes")
   );
 
-  const tone =
-    info.state === "approved" ? "success" :
-    info.state === "changes_requested" ? "danger" :
-    info.state === "pending" ? "warning" :
-    "neutral";
+  const tone = info.isStale
+    ? "warning"
+    : info.state === "approved"
+      ? "success"
+      : info.state === "changes_requested"
+        ? "danger"
+        : info.state === "pending"
+          ? "warning"
+          : "neutral";
 
-  const stateLabel =
-    info.state === "approved" ? "Approved" :
-    info.state === "changes_requested" ? "Changes requested" :
-    info.state === "pending" ? `In review · ${info.approvalsCount} of ${info.threshold}` :
-    "Cancelled";
+  const stateLabel = info.isStale
+    ? "Approved, stale"
+    : info.state === "approved"
+      ? "Approved"
+      : info.state === "changes_requested"
+        ? "Changes requested"
+        : info.state === "pending"
+          ? `In review · ${info.approvalsCount} of ${info.threshold}`
+          : "Cancelled";
 
-  const StateIcon =
-    info.state === "approved" ? CheckmarkIcon :
-    info.state === "changes_requested" ? WarningIcon :
-    info.state === "pending" ? EditIcon :
-    CloseIcon;
+  const StateIcon = info.isStale
+    ? WarningIcon
+    : info.state === "approved"
+      ? CheckmarkIcon
+      : info.state === "changes_requested"
+        ? WarningIcon
+        : info.state === "pending"
+          ? EditIcon
+          : CloseIcon;
 
   const hasHistory = (info.actions ?? []).length > 0;
   const canEditReviewers =
-    isAuthor && (info.state === "pending" || info.state === "changes_requested");
+    isAuthor &&
+    (info.state === "pending" || info.state === "changes_requested");
 
   return (
     <BarWrap>
@@ -303,10 +351,16 @@ function DocApprovalBarInner({ documentId }: Props) {
               Waiting on <strong>{waitingOn}</strong>
             </IconText>
           )}
-          {info.state === "approved" && info.completedAt && (
+          {info.lastReviewedAt && (
             <IconText>
               <ClockIcon size={14} />
-              Approved {timeAgo(info.completedAt)}
+              Last reviewed {timeAgo(info.lastReviewedAt)}
+            </IconText>
+          )}
+          {info.isStale && (
+            <IconText>
+              <WarningIcon size={14} />
+              {staleCopy(info)}
             </IconText>
           )}
           {info.state === "changes_requested" && (
@@ -327,12 +381,10 @@ function DocApprovalBarInner({ documentId }: Props) {
               Edit reviewers
             </ActionButton>
           )}
-          {hasHistory && (
-            <ActionButton type="button" onClick={() => setHistoryOpen((o) => !o)}>
-              <HistoryIcon size={14} />
-              {historyOpen ? "Hide history" : "View history"}
-            </ActionButton>
-          )}
+          <ActionButton type="button" onClick={() => setDetailsOpen((o) => !o)}>
+            <HistoryIcon size={14} />
+            {detailsOpen ? "Hide details" : "Review details"}
+          </ActionButton>
         </BarContent>
 
         <BarActions>
@@ -375,33 +427,88 @@ function DocApprovalBarInner({ documentId }: Props) {
         </BarActions>
       </Bar>
 
-      {historyOpen && hasHistory && (
+      {detailsOpen && (
         <HistoryPanel>
-          <HistoryTitle>
-            <HistoryIcon size={13} />
-            Activity
-          </HistoryTitle>
-          <HistoryList>
-            {(info.actions ?? []).map((a) => {
-              const userName = users.get(a.userId)?.name ?? "someone";
-              const verb = actionVerb(a.action);
-              const ActionIcon = actionIcon(a.action);
-              return (
-                <HistoryRow key={a.id}>
-                  <HistoryDot data-action={a.action}>
-                    <ActionIcon size={12} />
-                  </HistoryDot>
-                  <HistoryBody>
-                    <HistoryHeading>
-                      <strong>{userName}</strong> {verb} ·{" "}
-                      <HistoryTime>{timeAgo(a.createdAt)}</HistoryTime>
-                    </HistoryHeading>
-                    {a.body && <HistoryComment>{a.body}</HistoryComment>}
-                  </HistoryBody>
-                </HistoryRow>
-              );
-            })}
-          </HistoryList>
+          <PanelHeader>
+            <HistoryTitle>
+              <HistoryIcon size={13} />
+              Review details
+            </HistoryTitle>
+            <PanelMeta>
+              {info.approvalsCount} of {info.threshold} approvals required
+            </PanelMeta>
+          </PanelHeader>
+          <PanelGrid>
+            <PanelSection>
+              <PanelLabel>Current state</PanelLabel>
+              <StateSummary>
+                <Badge $tone={tone}>
+                  <StateIcon size={14} /> {stateLabel}
+                </Badge>
+                <SummaryText>
+                  {info.lastReviewedAt
+                    ? `Last reviewed ${timeAgo(info.lastReviewedAt)}`
+                    : "No completed review yet"}
+                </SummaryText>
+                {info.isStale && (
+                  <StaleNote>
+                    <WarningIcon size={14} />
+                    {staleCopy(info)}
+                  </StaleNote>
+                )}
+              </StateSummary>
+            </PanelSection>
+            <PanelSection>
+              <PanelLabel>Requested reviewers</PanelLabel>
+              <ReviewerRows>
+                {reviewers.map((id) => {
+                  const status = reviewerStatus(
+                    id,
+                    currentRoundActions(info.actions ?? [])
+                  );
+                  const StatusIcon = actionIcon(status.action ?? "pending");
+                  return (
+                    <ReviewerRow key={id}>
+                      <ReviewerIdentity>
+                        <ReviewerDot data-action={status.action ?? "pending"}>
+                          <StatusIcon size={11} />
+                        </ReviewerDot>
+                        <span>{users.get(id)?.name ?? "Unknown reviewer"}</span>
+                      </ReviewerIdentity>
+                      <ReviewerState>{status.label}</ReviewerState>
+                    </ReviewerRow>
+                  );
+                })}
+              </ReviewerRows>
+            </PanelSection>
+          </PanelGrid>
+
+          {hasHistory && (
+            <>
+              <PanelLabel>Activity</PanelLabel>
+              <HistoryList>
+                {(info.actions ?? []).map((a) => {
+                  const userName = users.get(a.userId)?.name ?? "someone";
+                  const verb = actionVerb(a.action);
+                  const ActionIcon = actionIcon(a.action);
+                  return (
+                    <HistoryRow key={a.id}>
+                      <HistoryDot data-action={a.action}>
+                        <ActionIcon size={12} />
+                      </HistoryDot>
+                      <HistoryBody>
+                        <HistoryHeading>
+                          <strong>{userName}</strong> {verb} ·{" "}
+                          <HistoryTime>{timeAgo(a.createdAt)}</HistoryTime>
+                        </HistoryHeading>
+                        {a.body && <HistoryComment>{a.body}</HistoryComment>}
+                      </HistoryBody>
+                    </HistoryRow>
+                  );
+                })}
+              </HistoryList>
+            </>
+          )}
         </HistoryPanel>
       )}
 
@@ -443,6 +550,8 @@ function actionIcon(action: string) {
       return CheckmarkIcon;
     case "request_changes":
       return WarningIcon;
+    case "pending":
+      return ClockIcon;
     case "cancel":
       return CloseIcon;
     case "re_request":
@@ -452,6 +561,63 @@ function actionIcon(action: string) {
     default:
       return HistoryIcon;
   }
+}
+
+function currentRoundActions(actions: ReviewAction[]) {
+  const reRequest = [...actions]
+    .reverse()
+    .find((action) => action.action === "re_request");
+
+  if (!reRequest) {
+    return actions;
+  }
+
+  const roundStartedAt = new Date(reRequest.createdAt).getTime();
+  return actions.filter(
+    (action) => new Date(action.createdAt).getTime() >= roundStartedAt
+  );
+}
+
+function reviewerStatus(userId: string, actions: ReviewAction[]) {
+  const action = [...actions]
+    .reverse()
+    .find(
+      (a) =>
+        a.userId === userId &&
+        (a.action === "approve" || a.action === "request_changes")
+    );
+
+  if (action?.action === "approve") {
+    return {
+      action: "approve",
+      label: `Approved ${timeAgo(action.createdAt)}`,
+    };
+  }
+
+  if (action?.action === "request_changes") {
+    return {
+      action: "request_changes",
+      label: `Requested changes ${timeAgo(action.createdAt)}`,
+    };
+  }
+
+  return { action: null, label: "Waiting" };
+}
+
+function staleCopy(info: ReviewInfo) {
+  if (info.staleReason === "edited_after_approval") {
+    return "Changed since approval";
+  }
+  if (
+    info.staleReason === "review_expired" &&
+    typeof info.daysSinceReview === "number"
+  ) {
+    return `Review older than ${info.staleThresholdDays ?? 60} days`;
+  }
+  if (info.staleReason === "never_reviewed") {
+    return "Never reviewed";
+  }
+  return "Review may be stale";
 }
 
 function timeAgo(iso: string): string {
@@ -503,11 +669,11 @@ function ReviewerPicker({
   }, [users]);
 
   const list = users.orderedData.filter(
-    (u) => u.id !== currentUserId && (
-      !query.trim() ||
-      u.name.toLowerCase().includes(query.toLowerCase()) ||
-      u.email.toLowerCase().includes(query.toLowerCase())
-    )
+    (u) =>
+      u.id !== currentUserId &&
+      (!query.trim() ||
+        u.name.toLowerCase().includes(query.toLowerCase()) ||
+        u.email.toLowerCase().includes(query.toLowerCase()))
   );
 
   const toggle = (id: string) => {
@@ -526,7 +692,9 @@ function ReviewerPicker({
   return (
     <PickerOverlay onClick={onCancel}>
       <PickerCard onClick={(e) => e.stopPropagation()}>
-        <PickerTitle>{mode === "edit" ? "Edit reviewers" : "Request review"}</PickerTitle>
+        <PickerTitle>
+          {mode === "edit" ? "Edit reviewers" : "Request review"}
+        </PickerTitle>
         <PickerHint>
           {mode === "edit"
             ? "Add or remove reviewers. Approvals from kept reviewers stay; approvals from removed reviewers no longer count."
@@ -546,9 +714,15 @@ function ReviewerPicker({
             <PickerEmpty>No matching teammates.</PickerEmpty>
           ) : (
             list.map((u) => (
-              <PickerRow key={u.id} $selected={selected.has(u.id)} onClick={() => toggle(u.id)}>
+              <PickerRow
+                key={u.id}
+                $selected={selected.has(u.id)}
+                onClick={() => toggle(u.id)}
+              >
                 <PickerCheckbox $checked={selected.has(u.id)}>
-                  {selected.has(u.id) && <CheckmarkIcon size={14} color="white" />}
+                  {selected.has(u.id) && (
+                    <CheckmarkIcon size={14} color="white" />
+                  )}
                 </PickerCheckbox>
                 <PickerUser>
                   <PickerName>{u.name}</PickerName>
@@ -568,13 +742,17 @@ function ReviewerPicker({
               min={1}
               max={Math.max(1, selected.size)}
               value={threshold}
-              onChange={(e) => setThreshold(Math.max(1, parseInt(e.target.value, 10) || 1))}
+              onChange={(e) =>
+                setThreshold(Math.max(1, parseInt(e.target.value, 10) || 1))
+              }
               disabled={selected.size === 0}
             />
             <span>of {selected.size}</span>
           </ThresholdField>
           <PickerActions>
-            <Button neutral onClick={onCancel}>Cancel</Button>
+            <Button neutral onClick={onCancel}>
+              Cancel
+            </Button>
             <Button
               disabled={selected.size === 0 || threshold > selected.size}
               onClick={() => onSubmit(Array.from(selected), threshold)}
@@ -594,10 +772,14 @@ type Tone = "success" | "warning" | "danger" | "neutral";
 
 const toneColor = (theme: { brand?: Record<string, string> }, tone: Tone) => {
   switch (tone) {
-    case "success": return theme.brand?.green ?? "#22c55e";
-    case "warning": return theme.brand?.yellow ?? "#f59e0b";
-    case "danger":  return theme.brand?.red ?? "#ef4444";
-    default:        return theme.brand?.marine ?? "#0c1622";
+    case "success":
+      return theme.brand?.green ?? "#22c55e";
+    case "warning":
+      return theme.brand?.yellow ?? "#f59e0b";
+    case "danger":
+      return theme.brand?.red ?? "#ef4444";
+    default:
+      return theme.brand?.marine ?? "#0c1622";
   }
 };
 
@@ -635,7 +817,10 @@ const ActionButton = styled.button<{ $strong?: boolean }>`
   height: 28px;
   padding: 0 8px;
   cursor: pointer;
-  transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
+  transition:
+    background 100ms ease,
+    border-color 100ms ease,
+    color 100ms ease;
   white-space: nowrap;
 
   svg {
@@ -651,11 +836,19 @@ const ActionButton = styled.button<{ $strong?: boolean }>`
 
 const HistoryPanel = styled.div`
   margin-top: 8px;
-  width: min(640px, 100%);
-  padding: 10px;
+  width: min(780px, 100%);
+  padding: 12px;
   border-radius: 8px;
   border: 1px solid ${(props) => props.theme.divider};
   background: ${(props) => props.theme.background};
+`;
+
+const PanelHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
 `;
 
 const HistoryTitle = styled.div`
@@ -667,7 +860,113 @@ const HistoryTitle = styled.div`
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: ${(props) => props.theme.textTertiary};
+`;
+
+const PanelMeta = styled.span`
+  color: ${(props) => props.theme.textTertiary};
+  font-size: 12px;
+`;
+
+const PanelGrid = styled.div`
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 1fr);
+  gap: 12px;
+  margin-bottom: 12px;
+
+  @media (max-width: 720px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
+const PanelSection = styled.div`
+  border: 1px solid ${(props) => props.theme.divider};
+  background: ${(props) => props.theme.backgroundSecondary};
+  border-radius: 8px;
+  padding: 10px;
+`;
+
+const PanelLabel = styled.div`
+  color: ${(props) => props.theme.textTertiary};
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   margin-bottom: 8px;
+`;
+
+const StateSummary = styled.div`
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 8px;
+`;
+
+const SummaryText = styled.span`
+  color: ${(props) => props.theme.textSecondary};
+  font-size: 13px;
+`;
+
+const StaleNote = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: ${(props) => props.theme.warning};
+  font-size: 13px;
+`;
+
+const ReviewerRows = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+`;
+
+const ReviewerRow = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: ${(props) => props.theme.text};
+  font-size: 13px;
+`;
+
+const ReviewerIdentity = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+`;
+
+const ReviewerState = styled.span`
+  color: ${(props) => props.theme.textTertiary};
+  white-space: nowrap;
+`;
+
+const ReviewerDot = styled.span`
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  background: ${(props) => props.theme.textTertiary};
+
+  &[data-action="approve"] {
+    background: ${(p) => p.theme.brand?.green ?? "#22c55e"};
+  }
+  &[data-action="request_changes"] {
+    background: ${(p) => p.theme.brand?.red ?? "#ef4444"};
+  }
+  &[data-action="pending"] {
+    background: ${(p) => p.theme.textTertiary};
+  }
 `;
 
 const HistoryList = styled.div`
@@ -841,8 +1140,13 @@ const PickerSearch = styled.input`
   padding: 8px 12px;
   font-size: 14px;
   font-family: inherit;
-  &::placeholder { color: ${(props) => props.theme.textTertiary}; }
-  &:focus { outline: none; border-color: ${(props) => props.theme.brand?.marine ?? props.theme.text}; }
+  &::placeholder {
+    color: ${(props) => props.theme.textTertiary};
+  }
+  &:focus {
+    outline: none;
+    border-color: ${(props) => props.theme.brand?.marine ?? props.theme.text};
+  }
 `;
 
 const PickerList = styled.div`
@@ -868,7 +1172,9 @@ const PickerRow = styled.div<{ $selected: boolean }>`
   cursor: pointer;
   border-bottom: 1px solid ${(props) => props.theme.divider};
 
-  &:last-child { border-bottom: none; }
+  &:last-child {
+    border-bottom: none;
+  }
 
   ${(p) =>
     p.$selected &&
@@ -885,8 +1191,11 @@ const PickerCheckbox = styled.div<{ $checked: boolean }>`
   width: 18px;
   height: 18px;
   border-radius: 4px;
-  border: 1.5px solid ${(p) => p.$checked ? (p.theme.brand?.marine ?? "#0c1622") : p.theme.divider};
-  background: ${(p) => p.$checked ? (p.theme.brand?.marine ?? "#0c1622") : "transparent"};
+  border: 1.5px solid
+    ${(p) =>
+      p.$checked ? (p.theme.brand?.marine ?? "#0c1622") : p.theme.divider};
+  background: ${(p) =>
+    p.$checked ? (p.theme.brand?.marine ?? "#0c1622") : "transparent"};
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -938,7 +1247,9 @@ const ThresholdInput = styled.input`
   padding: 4px 8px;
   font-size: 13px;
   font-family: inherit;
-  &:disabled { opacity: 0.5; }
+  &:disabled {
+    opacity: 0.5;
+  }
 `;
 
 const PickerActions = styled.div`

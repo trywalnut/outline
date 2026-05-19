@@ -134,7 +134,7 @@ export default function blockMenuItems(
       name: "attachment",
       title: t("HTML artifact"),
       icon: <BrowserIcon />,
-      keywords: "html artifact app webpage upload",
+      keywords: "html artifact app webpage upload miniapp preview code sandbox",
       attrs: {
         accept: ".html,.htm,text/html,application/xhtml+xml",
         width: 720,
