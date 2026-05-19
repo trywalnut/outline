@@ -1,5 +1,15 @@
 import { observer } from "mobx-react";
-import { CheckmarkIcon, CloseIcon, EditIcon, WarningIcon } from "outline-icons";
+import {
+  CheckmarkIcon,
+  ClockIcon,
+  CloseIcon,
+  CommentIcon,
+  EditIcon,
+  HistoryIcon,
+  PlusIcon,
+  UserIcon,
+  WarningIcon,
+} from "outline-icons";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import styled, { css } from "styled-components";
 import Button from "~/components/Button";
@@ -62,7 +72,7 @@ function DocApprovalBarInner({ documentId }: Props) {
       const res = await client.post("/arrow.reviews.info", { documentId });
       const data = (res as { data?: ReviewInfo | null } | null)?.data ?? null;
       setInfo(data);
-    } catch (err) {
+    } catch (_err) {
       // Swallow — render nothing rather than break the doc scene
       setInfo("error");
     }
@@ -74,7 +84,9 @@ function DocApprovalBarInner({ documentId }: Props) {
 
   const handleApprove = useCallback(
     async () => {
-      if (!info || typeof info === "string") return;
+      if (!info || typeof info === "string") {
+        return;
+      }
       const comment = window.prompt("Optional approval comment:") ?? undefined;
       try {
         await client.post("/arrow.reviews.approve", { requestId: info.id, comment });
@@ -88,9 +100,13 @@ function DocApprovalBarInner({ documentId }: Props) {
   );
 
   const handleRequestChanges = useCallback(async () => {
-    if (!info || typeof info === "string") return;
+    if (!info || typeof info === "string") {
+      return;
+    }
     const comment = window.prompt("Describe the changes needed (required):");
-    if (!comment || !comment.trim()) return;
+    if (!comment || !comment.trim()) {
+      return;
+    }
     try {
       await client.post("/arrow.reviews.requestChanges", {
         requestId: info.id, comment,
@@ -103,13 +119,17 @@ function DocApprovalBarInner({ documentId }: Props) {
   }, [info, refresh]);
 
   const handleCancel = useCallback(async () => {
-    if (!info || typeof info === "string") return;
-    if (!window.confirm("Cancel this review?")) return;
+    if (!info || typeof info === "string") {
+      return;
+    }
+    if (!window.confirm("Cancel this review?")) {
+      return;
+    }
     try {
       await client.post("/arrow.reviews.cancel", { requestId: info.id });
       toast.success("Cancelled");
       await refresh();
-    } catch (err) {
+    } catch (_err) {
       toast.error("Cancel failed");
     }
   }, [info, refresh]);
@@ -125,12 +145,14 @@ function DocApprovalBarInner({ documentId }: Props) {
   }, [documentId, refresh]);
 
   const handleUnlock = useCallback(async () => {
-    if (!window.confirm("Unlock this document for further edits? The prior approval is preserved as historical.")) return;
+    if (!window.confirm("Unlock this document for further edits? The prior approval is preserved as historical.")) {
+      return;
+    }
     try {
       await client.post("/arrow.reviews.unlock", { documentId });
       toast.success("Unlocked — you can edit again");
       await refresh();
-    } catch (err) {
+    } catch (_err) {
       toast.error("Unlock failed");
     }
   }, [documentId, refresh]);
@@ -210,18 +232,24 @@ function DocApprovalBarInner({ documentId }: Props) {
   // No active or completed review → show "Request review" button to authors only.
   if (!info) {
     return (
-      <Bar $tone="neutral">
-        <BarContent>
-          <Badge $tone="neutral">
-            <EditIcon size={14} /> Draft
-          </Badge>
-          <BarText>Not yet under review.</BarText>
-        </BarContent>
-        <BarActions>
-          <Button neutral onClick={() => setPickerOpen(true)}>
-            Request review
-          </Button>
-        </BarActions>
+      <BarWrap>
+        <Bar $tone="neutral">
+          <BarContent>
+            <Badge $tone="neutral">
+              <EditIcon size={14} /> Draft
+            </Badge>
+            <IconText>
+              <ClockIcon size={14} />
+              Not yet under review
+            </IconText>
+          </BarContent>
+          <BarActions>
+            <ActionButton type="button" onClick={() => setPickerOpen(true)}>
+              <PlusIcon size={14} />
+              Request review
+            </ActionButton>
+          </BarActions>
+        </Bar>
         {pickerOpen && (
           <ReviewerPicker
             documentId={documentId}
@@ -230,7 +258,7 @@ function DocApprovalBarInner({ documentId }: Props) {
             onSubmit={handleRequestReview}
           />
         )}
-      </Bar>
+      </BarWrap>
     );
   }
 
@@ -270,64 +298,99 @@ function DocApprovalBarInner({ documentId }: Props) {
             <StateIcon size={14} /> {stateLabel}
           </Badge>
           {waitingOn && (
-            <BarText>
+            <IconText>
+              <UserIcon size={14} />
               Waiting on <strong>{waitingOn}</strong>
-            </BarText>
+            </IconText>
           )}
           {info.state === "approved" && info.completedAt && (
-            <BarText>
+            <IconText>
+              <ClockIcon size={14} />
               Approved {timeAgo(info.completedAt)}
-            </BarText>
+            </IconText>
           )}
           {info.state === "changes_requested" && (
-            <BarText>
+            <IconText>
+              <CommentIcon size={14} />
               Author needs to address feedback and re-request review.
-            </BarText>
+            </IconText>
+          )}
+          {info.state !== "pending" && (
+            <IconText>
+              <UserIcon size={14} />
+              {info.approvalsCount} of {info.threshold} approvals
+            </IconText>
           )}
           {canEditReviewers && (
-            <SecondaryLink type="button" onClick={() => setEditPickerOpen(true)}>
+            <ActionButton type="button" onClick={() => setEditPickerOpen(true)}>
+              <UserIcon size={14} />
               Edit reviewers
-            </SecondaryLink>
+            </ActionButton>
           )}
           {hasHistory && (
-            <SecondaryLink type="button" onClick={() => setHistoryOpen((o) => !o)}>
+            <ActionButton type="button" onClick={() => setHistoryOpen((o) => !o)}>
+              <HistoryIcon size={14} />
               {historyOpen ? "Hide history" : "View history"}
-            </SecondaryLink>
+            </ActionButton>
           )}
         </BarContent>
 
         <BarActions>
           {isReviewer && !isAuthor && info.state === "pending" && !hasActed && (
             <>
-              <Button onClick={handleApprove}>Approve</Button>
-              <Button neutral onClick={handleRequestChanges}>Request changes</Button>
+              <ActionButton type="button" $strong onClick={handleApprove}>
+                <CheckmarkIcon size={14} />
+                Approve
+              </ActionButton>
+              <ActionButton type="button" onClick={handleRequestChanges}>
+                <WarningIcon size={14} />
+                Request changes
+              </ActionButton>
             </>
           )}
           {isAuthor && info.state === "pending" && (
-            <Button neutral onClick={handleCancel}>Cancel review</Button>
+            <ActionButton type="button" onClick={handleCancel}>
+              <CloseIcon size={14} />
+              Cancel review
+            </ActionButton>
           )}
           {isAuthor && info.state === "changes_requested" && (
             <>
-              <Button onClick={handleReRequest}>Re-request review</Button>
-              <Button neutral onClick={handleCancel}>Cancel</Button>
+              <ActionButton type="button" $strong onClick={handleReRequest}>
+                <PlusIcon size={14} />
+                Re-request review
+              </ActionButton>
+              <ActionButton type="button" onClick={handleCancel}>
+                <CloseIcon size={14} />
+                Cancel
+              </ActionButton>
             </>
           )}
           {isAuthor && info.state === "approved" && (
-            <Button neutral onClick={handleUnlock}>Unlock for edits</Button>
+            <ActionButton type="button" onClick={handleUnlock}>
+              <EditIcon size={14} />
+              Unlock for edits
+            </ActionButton>
           )}
         </BarActions>
       </Bar>
 
       {historyOpen && hasHistory && (
         <HistoryPanel>
-          <HistoryTitle>Activity</HistoryTitle>
+          <HistoryTitle>
+            <HistoryIcon size={13} />
+            Activity
+          </HistoryTitle>
           <HistoryList>
             {(info.actions ?? []).map((a) => {
               const userName = users.get(a.userId)?.name ?? "someone";
               const verb = actionVerb(a.action);
+              const ActionIcon = actionIcon(a.action);
               return (
                 <HistoryRow key={a.id}>
-                  <HistoryDot data-action={a.action} />
+                  <HistoryDot data-action={a.action}>
+                    <ActionIcon size={12} />
+                  </HistoryDot>
                   <HistoryBody>
                     <HistoryHeading>
                       <strong>{userName}</strong> {verb} ·{" "}
@@ -374,20 +437,45 @@ function actionVerb(action: string): string {
   }
 }
 
+function actionIcon(action: string) {
+  switch (action) {
+    case "approve":
+      return CheckmarkIcon;
+    case "request_changes":
+      return WarningIcon;
+    case "cancel":
+      return CloseIcon;
+    case "re_request":
+      return PlusIcon;
+    case "unlock":
+      return EditIcon;
+    default:
+      return HistoryIcon;
+  }
+}
+
 function timeAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime();
   const days = Math.floor(ms / 86_400_000);
-  if (days === 0) return "today";
-  if (days === 1) return "yesterday";
-  if (days < 7) return `${days} days ago`;
-  if (days < 30) return `${Math.floor(days / 7)} weeks ago`;
+  if (days === 0) {
+    return "today";
+  }
+  if (days === 1) {
+    return "yesterday";
+  }
+  if (days < 7) {
+    return `${days} days ago`;
+  }
+  if (days < 30) {
+    return `${Math.floor(days / 7)} weeks ago`;
+  }
   return `${Math.floor(days / 30)} months ago`;
 }
 
 // ── reviewer picker dialog ───────────────────────────────────────────────
 
 function ReviewerPicker({
-  documentId,
+  documentId: _documentId,
   currentUserId,
   mode = "request",
   initialSelected,
@@ -424,10 +512,15 @@ function ReviewerPicker({
 
   const toggle = (id: string) => {
     const next = new Set(selected);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
     setSelected(next);
-    if (threshold > next.size) setThreshold(Math.max(1, next.size));
+    if (threshold > next.size) {
+      setThreshold(Math.max(1, next.size));
+    }
   };
 
   return (
@@ -509,47 +602,66 @@ const toneColor = (theme: { brand?: Record<string, string> }, tone: Tone) => {
 };
 
 const BarWrap = styled.div`
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 `;
 
 const Bar = styled.div<{ $tone: Tone }>`
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 12px 16px;
-  border-radius: 10px;
-  background: ${(p) => toneColor(p.theme, p.$tone)}10;
-  border: 1px solid ${(p) => toneColor(p.theme, p.$tone)}33;
+  gap: 8px;
+  max-width: 100%;
+  padding: 5px 6px;
+  border-radius: 8px;
+  background: ${(props) => props.theme.background};
+  border: 1px solid ${(p) => toneColor(p.theme, p.$tone)}2e;
   position: relative;
   flex-wrap: wrap;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.03);
 `;
 
-const SecondaryLink = styled.button`
-  border: none;
-  background: transparent;
-  padding: 0;
-  font-family: inherit;
-  font-size: 12px;
+const ActionButton = styled.button<{ $strong?: boolean }>`
+  border: 1px solid ${(props) => props.theme.divider};
+  background: ${(props) =>
+    props.$strong ? props.theme.backgroundSecondary : "transparent"};
+  border-radius: 6px;
   color: ${(props) => props.theme.textSecondary};
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+  font-weight: 500;
+  font-size: 12px;
+  height: 28px;
+  padding: 0 8px;
   cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
+  white-space: nowrap;
+
+  svg {
+    flex-shrink: 0;
+  }
 
   &:hover {
     color: ${(props) => props.theme.text};
+    background: ${(props) => props.theme.backgroundSecondary};
+    border-color: ${(props) => props.theme.textTertiary};
   }
 `;
 
 const HistoryPanel = styled.div`
   margin-top: 8px;
-  padding: 12px 16px 8px;
-  border-radius: 10px;
+  width: min(640px, 100%);
+  padding: 10px;
+  border-radius: 8px;
   border: 1px solid ${(props) => props.theme.divider};
-  background: ${(props) => props.theme.backgroundSecondary};
+  background: ${(props) => props.theme.background};
 `;
 
 const HistoryTitle = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -561,21 +673,24 @@ const HistoryTitle = styled.div`
 const HistoryList = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 `;
 
 const HistoryRow = styled.div`
   display: flex;
-  gap: 10px;
+  gap: 8px;
   align-items: flex-start;
 `;
 
 const HistoryDot = styled.span`
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  margin-top: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
   background: ${(props) => props.theme.textTertiary};
 
   &[data-action="approve"] {
@@ -605,6 +720,7 @@ const HistoryBody = styled.div`
 
 const HistoryHeading = styled.div`
   font-size: 13px;
+  line-height: 22px;
   color: ${(props) => props.theme.text};
 
   strong {
@@ -619,7 +735,7 @@ const HistoryTime = styled.span`
 const HistoryComment = styled.div`
   font-size: 13px;
   color: ${(props) => props.theme.textSecondary};
-  background: ${(props) => props.theme.background};
+  background: ${(props) => props.theme.backgroundSecondary};
   border-left: 2px solid ${(props) => props.theme.divider};
   padding: 6px 10px;
   border-radius: 0 4px 4px 0;
@@ -630,7 +746,7 @@ const HistoryComment = styled.div`
 const BarContent = styled.div`
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
   min-width: 0;
 `;
@@ -639,19 +755,31 @@ const Badge = styled.span<{ $tone: Tone }>`
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
-  border-radius: 999px;
+  min-height: 28px;
+  padding: 0 9px;
+  border-radius: 6px;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.01em;
-  background: ${(p) => toneColor(p.theme, p.$tone)};
-  color: white;
+  background: ${(p) => toneColor(p.theme, p.$tone)}1a;
+  border: 1px solid ${(p) => toneColor(p.theme, p.$tone)}33;
+  color: ${(p) => toneColor(p.theme, p.$tone)};
   white-space: nowrap;
 `;
 
-const BarText = styled.span`
+const IconText = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 13px;
   color: ${(props) => props.theme.textSecondary};
+  min-height: 28px;
+  white-space: nowrap;
+
+  svg {
+    color: ${(props) => props.theme.textTertiary};
+    flex-shrink: 0;
+  }
 
   strong {
     color: ${(props) => props.theme.text};
@@ -661,7 +789,7 @@ const BarText = styled.span`
 
 const BarActions = styled.div`
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 `;
 
