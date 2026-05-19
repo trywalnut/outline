@@ -165,8 +165,8 @@ function SidebarLink(
             />
           )}
           {icon && <IconWrapper aria-hidden>{icon}</IconWrapper>}
-          <Label $ellipsis={ellipsis}>{label}</Label>
           {status && <StatusWrapper>{status}</StatusWrapper>}
+          <Label $ellipsis={ellipsis}>{label}</Label>
           {unreadBadge && <UnreadBadge style={unreadStyle} />}
         </Content>
       </ContextMenu>
@@ -399,6 +399,8 @@ const StatusWrapper = styled.span`
   align-items: center;
   height: 24px;
   flex: 0 0 auto;
+  margin-inline-start: 2px;
+  margin-inline-end: 2px;
 `;
 
 export default React.forwardRef<HTMLAnchorElement, Props>(SidebarLink);

@@ -131,7 +131,6 @@ const Dot = styled.span<{ $status: DocumentStatus }>`
   height: 7px;
   border-radius: 50%;
   flex: 0 0 auto;
-  margin-inline-start: 6px;
   background: ${(props) => {
     switch (props.$status) {
       case "draft":
