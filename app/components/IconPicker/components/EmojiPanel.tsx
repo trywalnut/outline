@@ -23,6 +23,63 @@ import { IconButton } from "./IconButton";
 
 const GRID_HEIGHT = 410;
 
+const RECOMMENDED_EMOJI_IDS = [
+  "memo",
+  "clipboard",
+  "notebook",
+  "ledger",
+  "open_file_folder",
+  "file_folder",
+  "card_index_dividers",
+  "bookmark_tabs",
+  "pushpin",
+  "round_pushpin",
+  "label",
+  "calendar",
+  "date",
+  "spiral_calendar_pad",
+  "bar_chart",
+  "chart_with_upwards_trend",
+  "mag",
+  "bulb",
+  "white_check_mark",
+  "heavy_check_mark",
+  "warning",
+  "rotating_light",
+  "hourglass_flowing_sand",
+  "dart",
+  "trophy",
+  "rocket",
+  "hospital",
+  "stethoscope",
+  "syringe",
+  "pill",
+  "adhesive_bandage",
+  "x-ray",
+  "test_tube",
+  "microscope",
+  "dna",
+  "computer",
+  "keyboard",
+  "gear",
+  "toolbox",
+  "wrench",
+  "hammer_and_wrench",
+  "lock",
+  "unlock",
+  "key",
+  "link",
+  "incoming_envelope",
+  "mailbox_with_mail",
+  "speech_balloon",
+  "thought_balloon",
+  "eyes",
+  "brain",
+  "sparkles",
+  "fire",
+  "zap",
+];
+
 type Props = {
   panelWidth: number;
   query: string;
@@ -239,6 +296,17 @@ const getAllEmojis = ({
 }): DataNode[] => {
   const emojisWithCategory = getEmojisWithCategory({ skinTone });
 
+  const getRecommendedIcons = (): DataNode => ({
+    category: DisplayCategory.Recommended,
+    icons: getEmojis({ ids: RECOMMENDED_EMOJI_IDS, skinTone }).map(
+      (emoji) => ({
+        type: IconType.Emoji as const,
+        id: emoji.id,
+        value: emoji.value,
+      })
+    ),
+  });
+
   const getFrequentIcons = (): DataNode => {
     const emojis = getEmojis({ ids: freqEmojis, skinTone });
 
@@ -272,6 +340,7 @@ const getAllEmojis = ({
 
   const allData = concat(
     getFrequentIcons(),
+    getRecommendedIcons(),
     getCategoryData(EmojiCategory.People),
     getCategoryData(EmojiCategory.Nature),
     getCategoryData(EmojiCategory.Foods),

@@ -3,12 +3,14 @@ import i18next from "i18next";
 export enum DisplayCategory {
   All = "All",
   Frequent = "Frequent",
+  Recommended = "Recommended",
   Search = "Search",
 }
 
 export const TRANSLATED_CATEGORIES = {
   All: i18next.t("All"),
   Frequent: i18next.t("Frequently Used"),
+  Recommended: i18next.t("Recommended"),
   Search: i18next.t("Search Results"),
   People: i18next.t("Smileys & People"),
   Nature: i18next.t("Animals & Nature"),
