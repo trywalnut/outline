@@ -37,7 +37,7 @@ export type Options = {
     alt?: string | null;
     /** Layout class for alignment when inserting image */
     layoutClass?: string | null;
-    /** Whether to show a PDF preview embed for attachment nodes */
+    /** Whether to show a preview embed for attachment nodes */
     preview?: boolean;
   };
 };

@@ -35,6 +35,8 @@ type Props = Omit<NavLinkProps, "to"> & {
   icon?: React.ReactNode;
   /** Text label or content to display for the link */
   label?: React.ReactNode;
+  /** Small status indicator displayed after the label */
+  status?: React.ReactNode;
   /** Optional menu to display on hover or interaction */
   menu?: React.ReactNode;
   /** Whether to show an unread badge indicator */
@@ -79,6 +81,7 @@ function SidebarLink(
     onClickIntent,
     to,
     label,
+    status,
     active,
     isActiveDrop,
     isDraft,
@@ -163,6 +166,7 @@ function SidebarLink(
           )}
           {icon && <IconWrapper aria-hidden>{icon}</IconWrapper>}
           <Label $ellipsis={ellipsis}>{label}</Label>
+          {status && <StatusWrapper>{status}</StatusWrapper>}
           {unreadBadge && <UnreadBadge style={unreadStyle} />}
         </Content>
       </ContextMenu>
@@ -377,7 +381,7 @@ const Link = styled(NavLink)<{
 
 const Label = styled.div<{ $ellipsis: boolean }>`
   position: relative;
-  width: 100%;
+  flex: 1 1 auto;
   line-height: 24px;
   margin-inline-start: 2px;
   min-width: 0;
@@ -388,6 +392,13 @@ const Label = styled.div<{ $ellipsis: boolean }>`
   * {
     unicode-bidi: plaintext;
   }
+`;
+
+const StatusWrapper = styled.span`
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  flex: 0 0 auto;
 `;
 
 export default React.forwardRef<HTMLAnchorElement, Props>(SidebarLink);

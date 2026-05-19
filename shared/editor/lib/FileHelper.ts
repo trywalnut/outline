@@ -47,6 +47,21 @@ export default class FileHelper {
   }
 
   /**
+   * Checks if a file is an HTML document.
+   *
+   * @param contentType The content type of the file
+   * @param fileName Optional file name fallback
+   * @returns True if the file is an HTML document
+   */
+  static isHtml(contentType?: string | null, fileName?: string | null) {
+    return (
+      /^text\/html$/i.test(contentType ?? "") ||
+      /^application\/xhtml\+xml$/i.test(contentType ?? "") ||
+      /\.html?$/i.test(fileName ?? "")
+    );
+  }
+
+  /**
    * Download a file from a URL and return it as a File object.
    *
    * @param url The URL to download the file from

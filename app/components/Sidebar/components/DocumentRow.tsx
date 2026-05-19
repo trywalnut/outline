@@ -15,6 +15,7 @@ import Tooltip from "~/components/Tooltip";
 import useBoolean from "~/hooks/useBoolean";
 import { ActionContextProvider } from "~/hooks/useActionContext";
 import DropToImport from "./DropToImport";
+import DocumentStatusDot from "./DocumentStatusDot";
 import Relative from "./Relative";
 import SidebarLink from "./SidebarLink";
 import type { SidebarContextType } from "./SidebarContext";
@@ -236,6 +237,12 @@ function DocumentRow({
       {menu}
     </Fade>
   ) : undefined;
+  const statusElement = !isEditing ? (
+    <DocumentStatusDot
+      documentId={documentId}
+      isDraft={isDraft ?? document?.isDraft}
+    />
+  ) : undefined;
 
   const defaultIsActive = React.useCallback(
     (
@@ -264,6 +271,7 @@ function DocumentRow({
       isActive={isActiveOverride ?? defaultIsActive}
       isActiveDrop={isActiveDropTarget}
       label={labelElement}
+      status={statusElement}
       ellipsis={!isEditing}
       exact={false}
       scrollIntoViewIfNeeded={scrollIntoViewIfNeeded}

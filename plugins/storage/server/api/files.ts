@@ -26,6 +26,21 @@ import { getJWTPayload } from "@server/utils/jwt";
 import * as T from "./schema";
 
 const router = new Router();
+const htmlContentTypes = new Set(["text/html", "application/xhtml+xml"]);
+const htmlPreviewContentSecurityPolicy = [
+  "sandbox allow-scripts allow-forms allow-popups allow-downloads",
+  "default-src 'none'",
+  "script-src 'unsafe-inline' 'unsafe-eval' blob: data: https:",
+  "style-src 'unsafe-inline' https:",
+  "img-src data: blob: https:",
+  "font-src data: https:",
+  "connect-src https:",
+  "media-src data: blob: https:",
+  "frame-src https:",
+  "worker-src blob:",
+  "base-uri 'none'",
+  "form-action 'none'",
+].join("; ");
 
 router.post(
   "files.create",
@@ -115,8 +130,10 @@ router.get(
       attachment?.contentType ||
       (fileName ? mime.lookup(fileName) : undefined) ||
       "application/octet-stream";
+    const isHtmlPreview =
+      ctx.input.query.preview === "html" && htmlContentTypes.has(contentType);
 
-    if (contentType === "application/pdf") {
+    if (contentType === "application/pdf" || isHtmlPreview) {
       ctx.remove("X-Frame-Options");
     }
 
@@ -129,7 +146,9 @@ router.get(
       // Safari will not render PDFs in an embed if the sandbox directive is used, so we use a
       // tight CSP in that case. For all other file types we use the strict sandbox directive
       // which blocks all content from being loaded and rendered.
-      contentType === "application/pdf"
+      isHtmlPreview
+        ? htmlPreviewContentSecurityPolicy
+        : contentType === "application/pdf"
         ? "default-src 'self'; object-src 'self'; base-uri 'none';"
         : "sandbox"
     );
@@ -138,7 +157,9 @@ router.get(
       contentDisposition(fileName, {
         type: forceDownload
           ? "attachment"
-          : FileStorage.getContentDisposition(contentType),
+          : isHtmlPreview
+            ? "inline"
+            : FileStorage.getContentDisposition(contentType),
       })
     );
 

@@ -270,6 +270,7 @@ const handleAttachmentsRedirect = async (
   ctx: APIContext<T.AttachmentsRedirectReq>
 ) => {
   const id = (ctx.input.body.id ?? ctx.input.query.id) as string;
+  const shouldPreviewHtml = ctx.input.query.preview === "html";
 
   const user = ctx.state.auth?.user;
   const attachment = await Attachment.findByPk(id, {
@@ -296,15 +297,35 @@ const handleAttachmentsRedirect = async (
 
   if (attachment.isStoredInPublicBucket) {
     ctx.set("Cache-Control", `max-age=604800, immutable`);
-    ctx.redirect(attachment.canonicalUrl);
+    ctx.redirect(
+      shouldPreviewHtml
+        ? appendHtmlPreviewParam(attachment.canonicalUrl)
+        : attachment.canonicalUrl
+    );
   } else {
     ctx.set(
       "Cache-Control",
       `max-age=${BaseStorage.defaultSignedUrlExpires}, immutable`
     );
-    ctx.redirect(await attachment.signedUrl);
+    const signedUrl = await attachment.signedUrl;
+    ctx.redirect(
+      shouldPreviewHtml ? appendHtmlPreviewParam(signedUrl) : signedUrl
+    );
   }
 };
+
+function appendHtmlPreviewParam(url: string) {
+  if (!url.includes("/api/files.get?")) {
+    return url;
+  }
+
+  const hashIndex = url.indexOf("#");
+  const base = hashIndex === -1 ? url : url.slice(0, hashIndex);
+  const hash = hashIndex === -1 ? "" : url.slice(hashIndex);
+  const separator = base.includes("?") ? "&" : "?";
+
+  return `${base}${separator}preview=html${hash}`;
+}
 
 router.get(
   "attachments.redirect",

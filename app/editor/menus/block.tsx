@@ -23,6 +23,7 @@ import {
   DoneIcon,
   EmbedIcon,
   CollapseIcon,
+  BrowserIcon,
 } from "outline-icons";
 import * as React from "react";
 import styled from "styled-components";
@@ -126,6 +127,18 @@ export default function blockMenuItems(
         accept: "application/pdf",
         width: 300,
         height: 424,
+        preview: true,
+      },
+    },
+    {
+      name: "attachment",
+      title: t("HTML artifact"),
+      icon: <BrowserIcon />,
+      keywords: "html artifact app webpage upload",
+      attrs: {
+        accept: ".html,.htm,text/html,application/xhtml+xml",
+        width: 720,
+        height: 480,
         preview: true,
       },
     },

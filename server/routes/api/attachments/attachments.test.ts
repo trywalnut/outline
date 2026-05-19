@@ -526,6 +526,35 @@ describe("#attachments.redirect", () => {
     expect(res.headers.get("location")).toContain(attachment.canonicalUrl);
   });
 
+  it("should forward HTML preview mode to local storage redirects", async () => {
+    const publicAttachment = await buildAttachment({
+      key: `public/${randomUUID()}/artifact.html`,
+      acl: "public-read",
+      contentType: "text/html",
+    });
+    const publicRes = await server.get(
+      `/api/attachments.redirect?id=${publicAttachment.id}&preview=html`,
+      {
+        redirect: "manual",
+      }
+    );
+    expect(publicRes.status).toEqual(302);
+    expect(publicRes.headers.get("location")).toContain("preview=html");
+
+    const signedAttachment = await buildAttachment({
+      acl: "public-read",
+      contentType: "text/html",
+    });
+    const signedRes = await server.get(
+      `/api/attachments.redirect?id=${signedAttachment.id}&preview=html`,
+      {
+        redirect: "manual",
+      }
+    );
+    expect(signedRes.status).toEqual(302);
+    expect(signedRes.headers.get("location")).toContain("preview=html");
+  });
+
   it("should return a redirect for a public-read attachment without authentication (not in public bucket)", async () => {
     const attachment = await buildAttachment({
       acl: "public-read",

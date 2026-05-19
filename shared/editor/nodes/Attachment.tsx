@@ -14,12 +14,14 @@ import { sanitizeUrl } from "../../utils/urls";
 import insertFiles from "../commands/insertFiles";
 import toggleWrap from "../commands/toggleWrap";
 import FileExtension from "../components/FileExtension";
+import HTMLArtifact from "../components/HTMLArtifact";
+import PdfViewer from "../components/PDF";
 import Widget from "../components/Widget";
+import FileHelper from "../lib/FileHelper";
 import type { MarkdownSerializerState } from "../lib/markdown/serializer";
 import attachmentsRule from "../rules/links";
 import type { ComponentProps } from "../types";
 import Node from "./Node";
-import PdfViewer from "../components/PDF";
 
 export default class Attachment extends Node {
   get name() {
@@ -127,17 +129,40 @@ export default class Attachment extends Node {
       </>
     );
 
-    return node.attrs.preview &&
+    if (
+      node.attrs.preview &&
       !embedsDisabled &&
-      node.attrs.contentType === "application/pdf" ? (
-      <PdfViewer
-        icon={<FileExtension title={node.attrs.title} />}
-        title={node.attrs.title}
-        context={context}
-        onChangeSize={this.handleChangeSize(props)}
-        {...props}
-      />
-    ) : (
+      node.attrs.contentType === "application/pdf"
+    ) {
+      return (
+        <PdfViewer
+          icon={<FileExtension title={node.attrs.title} />}
+          title={node.attrs.title}
+          context={context}
+          onChangeSize={this.handleChangeSize(props)}
+          {...props}
+        />
+      );
+    }
+
+    if (
+      node.attrs.preview &&
+      !embedsDisabled &&
+      node.attrs.href &&
+      FileHelper.isHtml(node.attrs.contentType, node.attrs.title)
+    ) {
+      return (
+        <HTMLArtifact
+          icon={<FileExtension title={node.attrs.title} />}
+          title={node.attrs.title}
+          context={context}
+          onChangeSize={this.handleChangeSize(props)}
+          {...props}
+        />
+      );
+    }
+
+    return (
       <Widget
         icon={<FileExtension title={node.attrs.title} />}
         href={node.attrs.href}
@@ -185,12 +210,7 @@ export default class Attachment extends Node {
           throw new Error("uploadFile prop is required to replace attachments");
         }
 
-        const accept =
-          node.attrs.contentType === "application/pdf"
-            ? ".pdf"
-            : node.type.name === "attachment"
-              ? "*"
-              : null;
+        const accept = getAttachmentAccept(node);
 
         if (accept === null) {
           return false;
@@ -239,7 +259,10 @@ export default class Attachment extends Node {
         }
         const { node } = state.selection;
 
-        if (node.attrs.contentType !== "application/pdf") {
+        if (
+          node.attrs.contentType !== "application/pdf" &&
+          !FileHelper.isHtml(node.attrs.contentType, node.attrs.title)
+        ) {
           return false;
         }
 
@@ -300,4 +323,20 @@ export default class Attachment extends Node {
       }),
     };
   }
+}
+
+function getAttachmentAccept(node: ProsemirrorNode) {
+  if (node.type.name !== "attachment") {
+    return null;
+  }
+
+  if (node.attrs.contentType === "application/pdf") {
+    return ".pdf,application/pdf";
+  }
+
+  if (FileHelper.isHtml(node.attrs.contentType, node.attrs.title)) {
+    return ".html,.htm,text/html,application/xhtml+xml";
+  }
+
+  return "*";
 }

@@ -1,4 +1,4 @@
-import { existsSync, copyFileSync } from "node:fs";
+import { existsSync, copyFileSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import FormData from "form-data";
@@ -274,6 +274,82 @@ describe("#files.get", () => {
     expect(res.headers.get("Content-Disposition")).toEqual(
       'attachment; filename="images.docx"'
     );
+  });
+
+  it("should download HTML attachments unless preview is requested", async () => {
+    const user = await buildUser();
+    const fileName = "artifact.html";
+
+    const attachment = await buildAttachment(
+      {
+        acl: "public-read",
+        key: AttachmentHelper.getKey({
+          id: randomUUID(),
+          name: fileName,
+          userId: user.id,
+        }).replace(Buckets.uploads, Buckets.public),
+        teamId: user.teamId,
+        userId: user.id,
+        contentType: "text/html",
+      },
+      fileName
+    );
+
+    ensureDirSync(
+      path.dirname(path.join(env.FILE_STORAGE_LOCAL_ROOT_DIR, attachment.key))
+    );
+    writeFileSync(
+      path.join(env.FILE_STORAGE_LOCAL_ROOT_DIR, attachment.key),
+      "<!doctype html><title>Artifact</title><h1>Hello</h1>"
+    );
+
+    const res = await server.get(attachment.canonicalUrl);
+    expect(res.status).toEqual(200);
+    expect(res.headers.get("Content-Type")).toEqual("text/html");
+    expect(res.headers.get("Content-Disposition")).toEqual(
+      'attachment; filename="artifact.html"'
+    );
+    expect(res.headers.get("Content-Security-Policy")).toEqual("sandbox");
+  });
+
+  it("should render HTML attachment previews in a sandbox", async () => {
+    const user = await buildUser();
+    const fileName = "artifact.html";
+
+    const attachment = await buildAttachment(
+      {
+        acl: "public-read",
+        key: AttachmentHelper.getKey({
+          id: randomUUID(),
+          name: fileName,
+          userId: user.id,
+        }).replace(Buckets.uploads, Buckets.public),
+        teamId: user.teamId,
+        userId: user.id,
+        contentType: "text/html",
+      },
+      fileName
+    );
+
+    ensureDirSync(
+      path.dirname(path.join(env.FILE_STORAGE_LOCAL_ROOT_DIR, attachment.key))
+    );
+    writeFileSync(
+      path.join(env.FILE_STORAGE_LOCAL_ROOT_DIR, attachment.key),
+      "<!doctype html><title>Artifact</title><script>document.body.textContent = 'Hello';</script>"
+    );
+
+    const res = await server.get(`${attachment.canonicalUrl}&preview=html`);
+    const csp = res.headers.get("Content-Security-Policy") ?? "";
+
+    expect(res.status).toEqual(200);
+    expect(res.headers.get("Content-Type")).toEqual("text/html");
+    expect(res.headers.get("Content-Disposition")).toEqual(
+      'inline; filename="artifact.html"'
+    );
+    expect(res.headers.get("X-Frame-Options")).toEqual(null);
+    expect(csp).toContain("sandbox allow-scripts");
+    expect(csp).not.toContain("allow-same-origin");
   });
 
   it("should succeed with status 200 ok when private attachment is requested using signature", async () => {

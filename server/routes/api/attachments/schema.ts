@@ -79,6 +79,8 @@ export const AttachmentsRedirectSchema = BaseSchema.extend({
   query: z.object({
     /** Id of the attachment to be deleted */
     id: z.uuid().optional(),
+    /** Optional file preview mode to forward to local storage */
+    preview: z.string().optional(),
   }),
 }).refine((req) => !(isEmpty(req.body.id) && isEmpty(req.query.id)), {
   message: "id is required",

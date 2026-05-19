@@ -1,6 +1,13 @@
 import type { TFunction } from "i18next";
-import { TrashIcon, DownloadIcon, ReplaceIcon, PDFIcon } from "outline-icons";
-import type { EditorState } from "prosemirror-state";
+import {
+  TrashIcon,
+  DownloadIcon,
+  ReplaceIcon,
+  PDFIcon,
+  BrowserIcon,
+} from "outline-icons";
+import { NodeSelection, type EditorState } from "prosemirror-state";
+import FileHelper from "@shared/editor/lib/FileHelper";
 import type { MenuItem } from "@shared/editor/types";
 import { isNodeActive } from "@shared/editor/queries/isNodeActive";
 
@@ -17,9 +24,18 @@ export default function attachmentMenuItems(
   const isAttachmentWithPreview = isNodeActive(schema.nodes.attachment, {
     preview: true,
   });
-  const isPdfAttachment = isNodeActive(schema.nodes.attachment, {
-    contentType: "application/pdf",
-  });
+  const selectedAttachment =
+    state.selection instanceof NodeSelection &&
+    state.selection.node.type === schema.nodes.attachment
+      ? state.selection.node
+      : undefined;
+  const isPdfAttachment =
+    selectedAttachment?.attrs.contentType === "application/pdf";
+  const isHtmlAttachment = FileHelper.isHtml(
+    selectedAttachment?.attrs.contentType,
+    selectedAttachment?.attrs.title
+  );
+  const isPreviewableAttachment = isPdfAttachment || isHtmlAttachment;
 
   return [
     {
@@ -35,9 +51,9 @@ export default function attachmentMenuItems(
     {
       name: "toggleAttachmentPreview",
       tooltip: t("Show preview"),
-      icon: <PDFIcon />,
+      icon: isHtmlAttachment ? <BrowserIcon /> : <PDFIcon />,
       active: isAttachmentWithPreview,
-      visible: isPdfAttachment(state),
+      visible: isPreviewableAttachment,
     },
     {
       name: "separator",
