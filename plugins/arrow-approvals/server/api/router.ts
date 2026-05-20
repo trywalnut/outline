@@ -1,7 +1,7 @@
 import Router from "koa-router";
 import { Op, type Transaction } from "sequelize";
 import httpErrors from "http-errors";
-import { Collection, Document } from "@server/models";
+import { Collection, Document, Revision } from "@server/models";
 import auth from "@server/middlewares/authentication";
 import { transaction } from "@server/middlewares/transaction";
 import validate from "@server/middlewares/validate";
@@ -312,7 +312,7 @@ router.post(
       order: [["createdAt", "ASC"]],
     });
     const tags = await getDocumentTagNames([document.id]);
-    const staleMeta = buildStaleMeta({
+    const staleMeta = await buildStaleMeta({
       document,
       request,
       collectionName: document.collection?.name,
@@ -382,7 +382,7 @@ router.post(
         const approvalsCount = request
           ? await countCurrentApprovals(request.id)
           : 0;
-        const stale = buildStaleMeta({
+        const stale = await buildStaleMeta({
           document,
           request,
           collectionName: collection.name,
@@ -499,7 +499,7 @@ function presentDashboardDocument(document: Document) {
   };
 }
 
-function buildStaleMeta({
+async function buildStaleMeta({
   document,
   request,
   collectionName,
@@ -509,7 +509,7 @@ function buildStaleMeta({
   request: ArrowReviewRequest | null;
   collectionName?: string;
   tags: string[];
-}): StaleMeta {
+}): Promise<StaleMeta> {
   const threshold = getStaleThresholdDays(collectionName, tags);
   const lastReviewedAt = request?.completedAt ?? null;
   const daysSinceReview = lastReviewedAt
@@ -519,9 +519,9 @@ function buildStaleMeta({
       )
     : null;
   const editedAfterApproval =
-    request?.state === "approved" &&
-    !!lastReviewedAt &&
-    document.updatedAt.getTime() > lastReviewedAt.getTime() + 60_000;
+    request?.state === "approved" && !!lastReviewedAt
+      ? await hasMeaningfulChangesSinceApproval(document, lastReviewedAt)
+      : false;
   const reviewExpired =
     !!lastReviewedAt &&
     daysSinceReview !== null &&
@@ -582,6 +582,81 @@ function getStaleThresholdDays(
   }
 
   return 60;
+}
+
+async function hasMeaningfulChangesSinceApproval(
+  document: Document,
+  lastReviewedAt: Date
+) {
+  if (document.updatedAt.getTime() <= lastReviewedAt.getTime() + 60_000) {
+    return false;
+  }
+
+  const approvedRevision = await Revision.findOne({
+    where: {
+      documentId: document.id,
+      createdAt: { [Op.lte]: lastReviewedAt },
+    },
+    order: [["createdAt", "DESC"]],
+  });
+
+  if (!approvedRevision) {
+    return true;
+  }
+
+  return semanticSnapshot(approvedRevision) !== semanticSnapshot(document);
+}
+
+function semanticSnapshot(model: Document | Revision) {
+  return JSON.stringify({
+    title: model.title ?? "",
+    icon: model.icon ?? null,
+    color: model.color ?? null,
+    content: normalizeContent(model.content),
+  });
+}
+
+function normalizeContent(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    const normalized = value
+      .map(normalizeContent)
+      .filter((item) => item !== undefined);
+
+    return normalized.length > 0 ? normalized : undefined;
+  }
+
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const normalized: Record<string, unknown> = {};
+  for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+    const next = normalizeContent((value as Record<string, unknown>)[key]);
+    if (next === undefined) {
+      continue;
+    }
+    if ((key === "attrs" || key === "marks") && isEmptyNormalized(next)) {
+      continue;
+    }
+    if (key === "content" && isEmptyNormalized(next)) {
+      continue;
+    }
+    normalized[key] = next;
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
+function isEmptyNormalized(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.length === 0;
+  }
+
+  return (
+    !!value &&
+    typeof value === "object" &&
+    Object.keys(value as Record<string, unknown>).length === 0
+  );
 }
 
 async function getDocumentTagNames(documentIds: string[]) {
