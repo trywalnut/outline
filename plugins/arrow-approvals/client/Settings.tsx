@@ -1,6 +1,6 @@
 import { observer } from "mobx-react";
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useHistory } from "react-router-dom";
 import styled from "styled-components";
 import Button from "~/components/Button";
 import Heading from "~/components/Heading";
@@ -40,11 +40,17 @@ interface DocSummary {
   id: string;
   title: string;
   urlId: string;
+  url?: string;
 }
+
+type DocumentsInfoResponse = {
+  data?: DocSummary | { document?: DocSummary };
+};
 
 type Filter = "awaiting_me" | "my_pending";
 
 function ArrowApprovalsSettings() {
+  const history = useHistory();
   const [filter, setFilter] = useState<Filter>("awaiting_me");
   const [reviews, setReviews] = useState<ReviewRequest[]>([]);
   const [docs, setDocs] = useState<Record<string, DocSummary>>({});
@@ -64,7 +70,9 @@ function ArrowApprovalsSettings() {
         list.map(async (r) => {
           try {
             const docRes = await client.post("/documents.info", { id: r.documentId });
-            const docData = (docRes as { data?: DocSummary } | null)?.data;
+            const docData = getDocumentFromInfoResponse(
+              docRes as DocumentsInfoResponse | null
+            );
             if (docData) {
               docMap[r.documentId] = docData;
             }
@@ -74,7 +82,7 @@ function ArrowApprovalsSettings() {
         })
       );
       setDocs(docMap);
-    } catch (err) {
+    } catch (_err) {
       toast.error("Failed to load reviews");
     } finally {
       setLoading(false);
@@ -133,7 +141,7 @@ function ArrowApprovalsSettings() {
         await client.post("/arrow.reviews.cancel", { requestId: review.id });
         toast.success("Cancelled");
         await refresh();
-      } catch (err) {
+      } catch (_err) {
         toast.error("Cancel failed");
       }
     },
@@ -153,6 +161,24 @@ function ArrowApprovalsSettings() {
       }
     },
     [refresh]
+  );
+
+  const getDocumentPath = useCallback((doc?: DocSummary) => {
+    if (!doc) {
+      return;
+    }
+
+    return doc.url ?? `/doc/${doc.urlId}`;
+  }, []);
+
+  const openDocument = useCallback(
+    (doc?: DocSummary) => {
+      const path = getDocumentPath(doc);
+      if (path) {
+        history.push(path);
+      }
+    },
+    [getDocumentPath, history]
   );
 
   return (
@@ -186,11 +212,24 @@ function ArrowApprovalsSettings() {
             const ageMs = Date.now() - new Date(review.createdAt).getTime();
             const days = Math.floor(ageMs / (1000 * 60 * 60 * 24));
             const ageStr = days === 0 ? "today" : `${days}d ago`;
+            const documentPath = getDocumentPath(doc);
             return (
-              <ReviewCard key={review.id}>
+              <ReviewCard
+                key={review.id}
+                role={documentPath ? "link" : undefined}
+                tabIndex={documentPath ? 0 : undefined}
+                onClick={() => openDocument(doc)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    openDocument(doc);
+                  }
+                }}
+                $clickable={!!documentPath}
+              >
                 <Title>
                   {doc ? (
-                    <Link to={`/doc/${doc.urlId}`}>{doc.title}</Link>
+                    <DocumentTitle>{doc.title || "Untitled"}</DocumentTitle>
                   ) : (
                     <em>(document unavailable)</em>
                   )}
@@ -200,14 +239,20 @@ function ArrowApprovalsSettings() {
                   Requested {ageStr} • {review.approvalsCount} of {review.threshold} approvals
                 </Meta>
                 {filter === "awaiting_me" ? (
-                  <Actions>
+                  <Actions
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                  >
                     <Button onClick={() => handleApprove(review)}>Approve</Button>
                     <Button neutral onClick={() => handleRequestChanges(review)}>
                       Request changes
                     </Button>
                   </Actions>
                 ) : (
-                  <Actions>
+                  <Actions
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                  >
                     {review.state === "changes_requested" && (
                       <Button onClick={() => handleReRequest(review)}>
                         Re-request review
@@ -227,6 +272,16 @@ function ArrowApprovalsSettings() {
   );
 }
 
+function getDocumentFromInfoResponse(res: DocumentsInfoResponse | null) {
+  const data = res?.data;
+
+  if (data && "document" in data) {
+    return data.document;
+  }
+
+  return data;
+}
+
 const EmptyState = styled.div`
   padding: 32px;
   text-align: center;
@@ -240,13 +295,28 @@ const ReviewList = styled.div`
   margin-top: 16px;
 `;
 
-const ReviewCard = styled.div`
+const ReviewCard = styled.div<{ $clickable: boolean }>`
   padding: 16px;
   border-radius: 8px;
   background: ${(props) => props.theme.backgroundSecondary};
   display: flex;
   flex-direction: column;
   gap: 8px;
+  cursor: ${(props) => (props.$clickable ? "pointer" : "default")};
+  transition:
+    background 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease;
+
+  &:hover {
+    background: ${(props) =>
+      props.$clickable ? props.theme.backgroundTertiary : props.theme.backgroundSecondary};
+  }
+
+  &:focus-visible {
+    outline: 2px solid ${(props) => props.theme.accent};
+    outline-offset: 2px;
+  }
 `;
 
 const Title = styled.div`
@@ -254,10 +324,14 @@ const Title = styled.div`
   align-items: center;
   gap: 12px;
   font-weight: 600;
+`;
 
-  a {
-    color: ${(props) => props.theme.text};
-  }
+const DocumentTitle = styled.span`
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: ${(props) => props.theme.text};
 `;
 
 const Meta = styled.div`
