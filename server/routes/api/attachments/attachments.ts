@@ -295,37 +295,23 @@ const handleAttachmentsRedirect = async (
     }
   );
 
-  if (attachment.isStoredInPublicBucket) {
+  if (shouldPreviewHtml) {
     ctx.set("Cache-Control", `max-age=604800, immutable`);
     ctx.redirect(
-      shouldPreviewHtml
-        ? appendHtmlPreviewParam(attachment.canonicalUrl)
-        : attachment.canonicalUrl
+      `/api/files.get?key=${encodeURIComponent(attachment.key)}&preview=html`
     );
+  } else if (attachment.isStoredInPublicBucket) {
+    ctx.set("Cache-Control", `max-age=604800, immutable`);
+    ctx.redirect(attachment.canonicalUrl);
   } else {
     ctx.set(
       "Cache-Control",
       `max-age=${BaseStorage.defaultSignedUrlExpires}, immutable`
     );
     const signedUrl = await attachment.signedUrl;
-    ctx.redirect(
-      shouldPreviewHtml ? appendHtmlPreviewParam(signedUrl) : signedUrl
-    );
+    ctx.redirect(signedUrl);
   }
 };
-
-function appendHtmlPreviewParam(url: string) {
-  if (!url.includes("/api/files.get?")) {
-    return url;
-  }
-
-  const hashIndex = url.indexOf("#");
-  const base = hashIndex === -1 ? url : url.slice(0, hashIndex);
-  const hash = hashIndex === -1 ? "" : url.slice(hashIndex);
-  const separator = base.includes("?") ? "&" : "?";
-
-  return `${base}${separator}preview=html${hash}`;
-}
 
 router.get(
   "attachments.redirect",

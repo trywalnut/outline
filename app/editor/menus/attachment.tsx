@@ -1,6 +1,7 @@
 import type { TFunction } from "i18next";
 import {
   TrashIcon,
+  CommentIcon,
   DownloadIcon,
   ReplaceIcon,
   PDFIcon,
@@ -47,6 +48,11 @@ export default function attachmentMenuItems(
       name: "deleteAttachment",
       tooltip: t("Delete file"),
       icon: <TrashIcon />,
+    },
+    {
+      name: "commentOnAttachment",
+      tooltip: t("Comment"),
+      icon: <CommentIcon />,
     },
     {
       name: "toggleAttachmentPreview",

@@ -6,8 +6,8 @@ import { changedDescendants } from "../lib/changedDescendants";
 import { isRemoteTransaction } from "../lib/multiplayer";
 
 /**
- * Plugin that applies a light outline decoration to image nodes that have
- * comment marks, providing a visual indicator that the image has been commented
+ * Plugin that applies a light outline decoration to media nodes that have
+ * comment marks, providing a visual indicator that the node has been commented
  * on.
  */
 export class CommentedImagePlugin extends Plugin {
@@ -41,12 +41,12 @@ export class CommentedImagePlugin extends Plugin {
   }
 
   /**
-   * Check if the transaction added, removed, or modified any image nodes.
+   * Check if the transaction added, removed, or modified any commentable media nodes.
    */
   private hasImageChange(tr: Transaction): boolean {
     let found = false;
     const check = (node: Node) => {
-      if (!found && node.type.name === "image") {
+      if (!found && isCommentableMediaNode(node)) {
         found = true;
       }
     };
@@ -63,7 +63,7 @@ export class CommentedImagePlugin extends Plugin {
 
     state.doc.descendants((node, pos) => {
       if (
-        node.type.name === "image" &&
+        isCommentableMediaNode(node) &&
         Array.isArray(node.attrs.marks) &&
         node.attrs.marks.some(
           (mark: { type: string; attrs?: { resolved?: boolean } }) =>
@@ -83,3 +83,7 @@ export class CommentedImagePlugin extends Plugin {
 }
 
 export const commentedImagePlugin = () => new CommentedImagePlugin();
+
+function isCommentableMediaNode(node: Node) {
+  return node.type.name === "image" || node.type.name === "attachment";
+}

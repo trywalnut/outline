@@ -11,6 +11,7 @@ import { Trans } from "react-i18next";
 import type { Primitive } from "utility-types";
 import { bytesToHumanReadable, getEventFiles } from "../../utils/files";
 import { sanitizeUrl } from "../../utils/urls";
+import { addComment } from "../commands/comment";
 import insertFiles from "../commands/insertFiles";
 import toggleWrap from "../commands/toggleWrap";
 import FileExtension from "../components/FileExtension";
@@ -19,6 +20,7 @@ import PdfViewer from "../components/PDF";
 import Widget from "../components/Widget";
 import FileHelper from "../lib/FileHelper";
 import type { MarkdownSerializerState } from "../lib/markdown/serializer";
+import { commentedImagePlugin } from "../plugins/CommentedImagePlugin";
 import attachmentsRule from "../rules/links";
 import type { ComponentProps } from "../types";
 import Node from "./Node";
@@ -30,6 +32,10 @@ export default class Attachment extends Node {
 
   get rulePlugins() {
     return [attachmentsRule];
+  }
+
+  get plugins() {
+    return [...super.plugins, commentedImagePlugin()];
   }
 
   get schema(): NodeSpec {
@@ -57,6 +63,9 @@ export default class Attachment extends Node {
         contentType: {
           default: null,
           validate: "string|null",
+        },
+        marks: {
+          default: undefined,
         },
       },
       group: "block",
@@ -253,6 +262,8 @@ export default class Attachment extends Node {
         document.body.removeChild(link);
         return true;
       },
+      commentOnAttachment: (): Command =>
+        addComment({ userId: this.options.userId }),
       toggleAttachmentPreview: (): Command => (state, dispatch) => {
         if (!(state.selection instanceof NodeSelection)) {
           return false;

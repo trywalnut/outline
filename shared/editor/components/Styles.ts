@@ -968,7 +968,9 @@ img.ProseMirror-separator {
   display: block;
 }
 
-.image-commented .image-wrapper {
+.image-commented .image-wrapper,
+.image-commented .html-artifact-wrapper,
+.image-commented .widget {
   outline: ${props.theme.commentedImageOutlineLight} solid 2px;
 }
 
