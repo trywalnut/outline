@@ -255,6 +255,9 @@ function DocumentEditor(props: Props, ref: React.ForwardedRef<SharedEditor>) {
             ? () => ui.set({ rightSidebar: "comments" })
             : undefined
         }
+        onOpenArtifact={(artifact) =>
+          ui.openArtifact({ ...artifact, documentId: document.id })
+        }
         onInit={handleInit}
         onDestroy={handleDestroy}
         onChange={updateDocState}

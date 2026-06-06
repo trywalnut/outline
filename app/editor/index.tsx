@@ -135,6 +135,13 @@ export type Props = {
   onDeleteCommentMark?: (commentId: string) => void;
   /** Callback when comments sidebar should be opened */
   onOpenCommentsSidebar?: () => void;
+  /** Callback when an HTML artifact should be opened in the center viewer */
+  onOpenArtifact?: (artifact: {
+    id: string;
+    href: string;
+    title: string;
+    contentType: string | null;
+  }) => void;
   /** Callback when a file upload begins */
   onFileUploadStart?: () => void;
   /** Callback when a file upload ends */

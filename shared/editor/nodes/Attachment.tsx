@@ -1,5 +1,5 @@
 import type Token from "markdown-it/lib/token.mjs";
-import { DownloadIcon } from "outline-icons";
+import { BrowserIcon, DownloadIcon, OpenIcon } from "outline-icons";
 import type {
   NodeSpec,
   NodeType,
@@ -15,7 +15,6 @@ import { addComment } from "../commands/comment";
 import insertFiles from "../commands/insertFiles";
 import toggleWrap from "../commands/toggleWrap";
 import FileExtension from "../components/FileExtension";
-import HTMLArtifact from "../components/HTMLArtifact";
 import PdfViewer from "../components/PDF";
 import Widget from "../components/Widget";
 import FileHelper from "../lib/FileHelper";
@@ -128,7 +127,7 @@ export default class Attachment extends Node {
     };
 
   component = (props: ComponentProps) => {
-    const { embedsDisabled } = this.editor.props;
+    const { embedsDisabled, onOpenArtifact } = this.editor.props;
     const { isSelected, isEditable, node } = props;
     const context = node.attrs.href ? (
       bytesToHumanReadable(node.attrs.size || "0")
@@ -161,13 +160,26 @@ export default class Attachment extends Node {
       FileHelper.isHtml(node.attrs.contentType, node.attrs.title)
     ) {
       return (
-        <HTMLArtifact
-          icon={<FileExtension title={node.attrs.title} />}
+        <Widget
+          icon={<BrowserIcon />}
+          href={node.attrs.href}
           title={node.attrs.title}
           context={context}
-          onChangeSize={this.handleChangeSize(props)}
-          {...props}
-        />
+          isSelected={isSelected}
+          onMouseDown={this.handleSelect(props)}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onOpenArtifact?.({
+              id: node.attrs.id,
+              href: node.attrs.href,
+              title: node.attrs.title,
+              contentType: node.attrs.contentType,
+            });
+          }}
+        >
+          <OpenIcon size={20} />
+        </Widget>
       );
     }
 

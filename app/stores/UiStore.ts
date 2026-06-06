@@ -28,6 +28,20 @@ export enum SystemTheme {
 
 export type ResolvedTheme = "light" | "dark" | "system";
 
+/** Identifies an HTML artifact opened in the center artifact viewer. */
+export type ActiveArtifact = {
+  /** Attachment id of the artifact. */
+  id: string;
+  /** URL to fetch the artifact HTML from. */
+  href: string;
+  /** Display title of the artifact. */
+  title: string;
+  /** MIME type of the artifact, if known. */
+  contentType: string | null;
+  /** Id of the document the artifact belongs to. */
+  documentId: string;
+};
+
 type PersistedData = Pick<
   UiStore,
   | "languagePromptDismissed"
@@ -119,6 +133,43 @@ class UiStore {
           data: document.data,
         }
       : null;
+  };
+
+  /** The HTML artifact currently open in the center viewer, if any. */
+  @observable
+  activeArtifact: ActiveArtifact | null = null;
+
+  /**
+   * Documents whose artifact has already been auto-opened this session. Prevents
+   * re-opening the viewer after the user has closed it, or on re-render.
+   */
+  autoOpenedArtifactDocumentIds = observable.set<string>();
+
+  /**
+   * Open an HTML artifact in the center viewer.
+   *
+   * @param artifact the artifact to open.
+   */
+  @action
+  openArtifact = (artifact: ActiveArtifact): void => {
+    this.activeArtifact = artifact;
+  };
+
+  /** Close the center artifact viewer. */
+  @action
+  closeArtifact = (): void => {
+    this.activeArtifact = null;
+  };
+
+  /**
+   * Record that a document's artifact has been auto-opened, so it is not
+   * re-opened automatically again this session.
+   *
+   * @param documentId the document id.
+   */
+  @action
+  markArtifactAutoOpened = (documentId: string): void => {
+    this.autoOpenedArtifactDocumentIds.add(documentId);
   };
 
   /** Tracks active export toasts for in-place updates when export completes */

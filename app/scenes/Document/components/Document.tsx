@@ -7,9 +7,10 @@ import { Prompt, useHistory, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import styled from "styled-components";
 import breakpoint from "styled-components-breakpoint";
+import FileHelper from "@shared/editor/lib/FileHelper";
 import { EditorStyleHelper } from "@shared/editor/styles/EditorStyleHelper";
-import { s } from "@shared/styles";
-import type { NavigationNode } from "@shared/types";
+import { depths, s } from "@shared/styles";
+import type { NavigationNode, ProsemirrorData } from "@shared/types";
 import { IconType, TOCPosition, TeamPreference } from "@shared/types";
 import { determineIconType } from "@shared/utils/icon";
 import { isModKey } from "@shared/utils/keyboard";
@@ -31,6 +32,7 @@ import { client } from "~/utils/ApiClient";
 import { emojiToUrl } from "~/utils/emoji";
 import { documentHistoryPath, documentEditPath } from "~/utils/routeHelpers";
 import { useDocumentSave } from "../hooks/useDocumentSave";
+import ArtifactViewer from "./ArtifactViewer";
 import Container from "./Container";
 import Contents from "./Contents";
 import Editor from "./Editor";
@@ -51,6 +53,51 @@ type LocationState = {
   restore?: boolean;
   revisionId?: string;
 };
+
+type ArtifactAttrs = {
+  id: string;
+  href: string;
+  title: string;
+  contentType: string | null;
+};
+
+/**
+ * Recursively search a ProseMirror document tree for the first HTML artifact
+ * (an attachment with preview enabled and an HTML content type).
+ *
+ * @param node the ProseMirror node to search.
+ * @returns the artifact attributes, or null if none is found.
+ */
+function findHtmlArtifact(node: ProsemirrorData): ArtifactAttrs | null {
+  if (node.type === "attachment" && node.attrs) {
+    const { id, href, title, contentType, preview } = node.attrs;
+    if (
+      preview &&
+      typeof id === "string" &&
+      typeof href === "string" &&
+      FileHelper.isHtml(
+        typeof contentType === "string" ? contentType : null,
+        typeof title === "string" ? title : null
+      )
+    ) {
+      return {
+        id,
+        href,
+        title: typeof title === "string" ? title : "HTML artifact",
+        contentType: typeof contentType === "string" ? contentType : null,
+      };
+    }
+  }
+
+  for (const child of node.content ?? []) {
+    const found = findHtmlArtifact(child);
+    if (found) {
+      return found;
+    }
+  }
+
+  return null;
+}
 
 interface Props {
   /** Tree of navigation nodes for shared documents. */
@@ -253,14 +300,41 @@ function DocumentScene({
     [onPublish]
   );
 
+  // When an HTML artifact viewer is open, Escape should close it rather than
+  // navigate away. Captured at render so it is race-free against the artifact
+  // viewer's own Escape handler (both fire in the same event tick).
+  const artifactOpen = !!ui.activeArtifact;
+
   const goBack = useCallback(() => {
+    if (artifactOpen) {
+      return;
+    }
     if (!readOnly) {
       history.push({
         pathname: document.url,
         state: { sidebarContext },
       });
     }
-  }, [readOnly, history, document, sidebarContext]);
+  }, [artifactOpen, readOnly, history, document, sidebarContext]);
+
+  // Auto-open an HTML artifact in the center viewer when a document loads, once
+  // per document per session. Closing the viewer does not re-open it.
+  React.useEffect(() => {
+    if (ui.activeArtifact && ui.activeArtifact.documentId !== document.id) {
+      ui.closeArtifact();
+    }
+    if (ui.autoOpenedArtifactDocumentIds.has(document.id)) {
+      return;
+    }
+    const artifact = findHtmlArtifact(document.data);
+    if (artifact) {
+      ui.openArtifact({ ...artifact, documentId: document.id });
+      ui.markArtifactAutoOpened(document.id);
+    }
+  }, [ui, document.id, document.data]);
+
+  // Close the artifact viewer when leaving the document.
+  React.useEffect(() => () => ui.closeArtifact(), [ui]);
 
   // Render
   const isShare = !!shareId;
@@ -378,7 +452,10 @@ function DocumentScene({
 
                     {/* Arrow fork: approval state bar + tag chips above the title */}
                     <DocApprovalBar documentId={document.id} />
-                    <DocTagBar documentId={document.id} canEdit={abilities.update} />
+                    <DocTagBar
+                      documentId={document.id}
+                      canEdit={abilities.update}
+                    />
 
                     {showContents && (
                       <PrintContentsContainer>
@@ -428,6 +505,14 @@ function DocumentScene({
           </Main>
           {children}
         </Container>
+        {ui.activeArtifact?.documentId === document.id && (
+          <ArtifactOverlay>
+            <ArtifactViewer
+              artifact={ui.activeArtifact}
+              onClose={ui.closeArtifact}
+            />
+          </ArtifactOverlay>
+        )}
       </MeasuredContainer>
     </ErrorBoundary>
   );
@@ -530,6 +615,15 @@ const EditorContainer = styled.div<EditorContainerProps>`
 
 const Background = styled(Container)`
   position: relative;
+  background: ${s("background")};
+`;
+
+const ArtifactOverlay = styled.div`
+  position: absolute;
+  inset: 0;
+  z-index: ${depths.header + 1};
+  display: flex;
+  flex-direction: column;
   background: ${s("background")};
 `;
 

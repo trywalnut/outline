@@ -969,7 +969,6 @@ img.ProseMirror-separator {
 }
 
 .image-commented .image-wrapper,
-.image-commented .html-artifact-wrapper,
 .image-commented .widget {
   outline: ${props.theme.commentedImageOutlineLight} solid 2px;
 }
