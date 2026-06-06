@@ -1,3 +1,4 @@
+import JWT from "jsonwebtoken";
 import Router from "koa-router";
 import type { WhereOptions } from "sequelize";
 import { randomUUID } from "node:crypto";
@@ -5,6 +6,7 @@ import { AttachmentPreset } from "@shared/types";
 import { bytesToHumanReadable, getFileNameFromUrl } from "@shared/utils/files";
 import { AttachmentValidation } from "@shared/validations";
 import { createContext } from "@server/context";
+import env from "@server/env";
 import {
   AuthorizationError,
   InvalidRequestError,
@@ -296,10 +298,19 @@ const handleAttachmentsRedirect = async (
   );
 
   if (shouldPreviewHtml) {
-    ctx.set("Cache-Control", `max-age=604800, immutable`);
-    ctx.redirect(
-      `/api/files.get?key=${encodeURIComponent(attachment.key)}&preview=html`
+    // HTML previews are served through files.get (rather than redirecting
+    // straight to storage) so the sandbox CSP headers can be applied — object
+    // storage like S3 cannot set them. Use a short-lived signed token instead
+    // of the raw key: the signature authorizes the request without re-looking
+    // up the attachment by key (which is brittle for filenames containing
+    // spaces or parentheses) and without re-running the per-owner read policy.
+    const sig = JWT.sign(
+      { key: attachment.key, type: "attachment" },
+      env.SECRET_KEY,
+      { expiresIn: 60 * 60 * 24 }
     );
+    ctx.set("Cache-Control", `max-age=3600`);
+    ctx.redirect(`/api/files.get?sig=${sig}&preview=html`);
   } else if (attachment.isStoredInPublicBucket) {
     ctx.set("Cache-Control", `max-age=604800, immutable`);
     ctx.redirect(attachment.canonicalUrl);
