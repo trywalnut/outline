@@ -23,17 +23,23 @@ if (env.FILE_STORAGE === "local") {
   }
 }
 
+// The files.get route serves attachments through the API rather than
+// redirecting straight to storage. Local storage relies on it for all
+// downloads; object storage (S3) needs it specifically to serve sandboxed HTML
+// artifact previews with the right Content-Security-Policy headers, which a
+// presigned storage URL cannot set. So enable it whenever file storage is
+// configured, not only for local storage.
 const enabled = !!(
   env.FILE_STORAGE_UPLOAD_MAX_SIZE &&
-  env.FILE_STORAGE_LOCAL_ROOT_DIR &&
-  env.FILE_STORAGE === "local"
+  (env.FILE_STORAGE !== "local" || env.FILE_STORAGE_LOCAL_ROOT_DIR)
 );
 
 if (enabled) {
   PluginManager.add([
     {
-      name: "Local file storage",
-      description: "Plugin for storing files on the local file system",
+      name: "File storage",
+      description:
+        "Serves file attachments through the API, including sandboxed HTML artifact previews",
       type: Hook.API,
       value: router,
       priority: PluginPriority.Normal,
