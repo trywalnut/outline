@@ -7,10 +7,9 @@ import { Prompt, useHistory, useLocation } from "react-router-dom";
 import { toast } from "sonner";
 import styled from "styled-components";
 import breakpoint from "styled-components-breakpoint";
-import FileHelper from "@shared/editor/lib/FileHelper";
 import { EditorStyleHelper } from "@shared/editor/styles/EditorStyleHelper";
 import { depths, s } from "@shared/styles";
-import type { NavigationNode, ProsemirrorData } from "@shared/types";
+import type { NavigationNode } from "@shared/types";
 import { IconType, TOCPosition, TeamPreference } from "@shared/types";
 import { determineIconType } from "@shared/utils/icon";
 import { isModKey } from "@shared/utils/keyboard";
@@ -53,51 +52,6 @@ type LocationState = {
   restore?: boolean;
   revisionId?: string;
 };
-
-type ArtifactAttrs = {
-  id: string;
-  href: string;
-  title: string;
-  contentType: string | null;
-};
-
-/**
- * Recursively search a ProseMirror document tree for the first HTML artifact
- * (an attachment with preview enabled and an HTML content type).
- *
- * @param node the ProseMirror node to search.
- * @returns the artifact attributes, or null if none is found.
- */
-function findHtmlArtifact(node: ProsemirrorData): ArtifactAttrs | null {
-  if (node.type === "attachment" && node.attrs) {
-    const { id, href, title, contentType, preview } = node.attrs;
-    if (
-      preview &&
-      typeof id === "string" &&
-      typeof href === "string" &&
-      FileHelper.isHtml(
-        typeof contentType === "string" ? contentType : null,
-        typeof title === "string" ? title : null
-      )
-    ) {
-      return {
-        id,
-        href,
-        title: typeof title === "string" ? title : "HTML artifact",
-        contentType: typeof contentType === "string" ? contentType : null,
-      };
-    }
-  }
-
-  for (const child of node.content ?? []) {
-    const found = findHtmlArtifact(child);
-    if (found) {
-      return found;
-    }
-  }
-
-  return null;
-}
 
 interface Props {
   /** Tree of navigation nodes for shared documents. */
@@ -317,21 +271,15 @@ function DocumentScene({
     }
   }, [artifactOpen, readOnly, history, document, sidebarContext]);
 
-  // Auto-open an HTML artifact in the center viewer when a document loads, once
-  // per document per session. Closing the viewer does not re-open it.
+  // Close any artifact belonging to a different document when navigating
+  // between documents without the scene unmounting. Auto-open itself is driven
+  // by the artifact node rendering in the editor (see ArtifactCard), which works
+  // for collaborative documents where document.data is not populated.
   React.useEffect(() => {
     if (ui.activeArtifact && ui.activeArtifact.documentId !== document.id) {
       ui.closeArtifact();
     }
-    if (ui.autoOpenedArtifactDocumentIds.has(document.id)) {
-      return;
-    }
-    const artifact = findHtmlArtifact(document.data);
-    if (artifact) {
-      ui.openArtifact({ ...artifact, documentId: document.id });
-      ui.markArtifactAutoOpened(document.id);
-    }
-  }, [ui, document.id, document.data]);
+  }, [ui, document.id]);
 
   // Close the artifact viewer when leaving the document.
   React.useEffect(() => () => ui.closeArtifact(), [ui]);

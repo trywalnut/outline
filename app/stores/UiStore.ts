@@ -162,14 +162,19 @@ class UiStore {
   };
 
   /**
-   * Record that a document's artifact has been auto-opened, so it is not
-   * re-opened automatically again this session.
+   * Open an artifact automatically, once per document per session. Does nothing
+   * if the document's artifact has already been auto-opened (e.g. after the user
+   * closed the viewer), so it is not re-opened on every re-render.
    *
-   * @param documentId the document id.
+   * @param artifact the artifact to open.
    */
   @action
-  markArtifactAutoOpened = (documentId: string): void => {
-    this.autoOpenedArtifactDocumentIds.add(documentId);
+  autoOpenArtifact = (artifact: ActiveArtifact): void => {
+    if (this.autoOpenedArtifactDocumentIds.has(artifact.documentId)) {
+      return;
+    }
+    this.autoOpenedArtifactDocumentIds.add(artifact.documentId);
+    this.activeArtifact = artifact;
   };
 
   /** Tracks active export toasts for in-place updates when export completes */

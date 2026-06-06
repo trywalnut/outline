@@ -50,6 +50,14 @@ export default abstract class BaseStorage {
   ): Promise<NodeJS.ReadableStream | null>;
 
   /**
+   * Returns the size in bytes of a file in the storage provider.
+   *
+   * @param key The path to the file
+   * @returns the size of the file in bytes.
+   */
+  public abstract getContentLength(key: string): Promise<number>;
+
+  /**
    * Returns the upload URL for the storage provider.
    *
    * @param isServerUpload Whether the upload is happening on the server or not

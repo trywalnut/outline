@@ -1,5 +1,5 @@
 import type Token from "markdown-it/lib/token.mjs";
-import { BrowserIcon, DownloadIcon, OpenIcon } from "outline-icons";
+import { DownloadIcon } from "outline-icons";
 import type {
   NodeSpec,
   NodeType,
@@ -14,6 +14,7 @@ import { sanitizeUrl } from "../../utils/urls";
 import { addComment } from "../commands/comment";
 import insertFiles from "../commands/insertFiles";
 import toggleWrap from "../commands/toggleWrap";
+import ArtifactCard from "../components/ArtifactCard";
 import FileExtension from "../components/FileExtension";
 import PdfViewer from "../components/PDF";
 import Widget from "../components/Widget";
@@ -160,26 +161,23 @@ export default class Attachment extends Node {
       FileHelper.isHtml(node.attrs.contentType, node.attrs.title)
     ) {
       return (
-        <Widget
-          icon={<BrowserIcon />}
+        <ArtifactCard
           href={node.attrs.href}
           title={node.attrs.title}
           context={context}
           isSelected={isSelected}
-          onMouseDown={this.handleSelect(props)}
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onOpenArtifact?.({
-              id: node.attrs.id,
-              href: node.attrs.href,
-              title: node.attrs.title,
-              contentType: node.attrs.contentType,
-            });
-          }}
-        >
-          <OpenIcon size={20} />
-        </Widget>
+          onOpen={(options) =>
+            onOpenArtifact?.(
+              {
+                id: node.attrs.id,
+                href: node.attrs.href,
+                title: node.attrs.title,
+                contentType: node.attrs.contentType,
+              },
+              options
+            )
+          }
+        />
       );
     }
 

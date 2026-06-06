@@ -19,7 +19,6 @@ import { Attachment } from "@server/models";
 import AttachmentHelper from "@server/models/helpers/AttachmentHelper";
 import { authorize } from "@server/policies";
 import FileStorage from "@server/storage/files";
-import type LocalStorage from "@server/storage/files/LocalStorage";
 import type { APIContext } from "@server/types";
 import { RateLimiterStrategy } from "@server/utils/RateLimiter";
 import { getJWTPayload } from "@server/utils/jwt";
@@ -149,8 +148,8 @@ router.get(
       isHtmlPreview
         ? htmlPreviewContentSecurityPolicy
         : contentType === "application/pdf"
-        ? "default-src 'self'; object-src 'self'; base-uri 'none';"
-        : "sandbox"
+          ? "default-src 'self'; object-src 'self'; base-uri 'none';"
+          : "sandbox"
     );
     ctx.set(
       "Content-Disposition",
@@ -165,21 +164,26 @@ router.get(
 
     // Handle byte range requests
     // https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests
-    const stats = await (FileStorage as LocalStorage).stat(key);
-    const range = getByteRange(ctx, stats.size);
+    // Use the storage abstraction so this works for both local and S3 backends.
+    const contentLength = await FileStorage.getContentLength(key);
+    const range = getByteRange(ctx, contentLength);
 
     if (range) {
       ctx.status = 206;
       ctx.set("Content-Length", String(range.end - range.start + 1));
       ctx.set(
         "Content-Range",
-        `bytes ${range.start}-${range.end}/${stats.size}`
+        `bytes ${range.start}-${range.end}/${contentLength}`
       );
     } else {
-      ctx.set("Content-Length", String(stats.size));
+      ctx.set("Content-Length", String(contentLength));
     }
 
-    ctx.body = await FileStorage.getFileStream(key, range);
+    const stream = await FileStorage.getFileStream(key, range);
+    if (!stream) {
+      throw NotFoundError();
+    }
+    ctx.body = stream;
   }
 );
 

@@ -169,6 +169,11 @@ export default class LocalStorage extends BaseStorage {
     return fs.stat(this.getFilePath(key));
   }
 
+  public async getContentLength(key: string): Promise<number> {
+    const stats = await this.stat(key);
+    return stats.size;
+  }
+
   public getFileExists(key: string) {
     return fs.pathExists(this.getFilePath(key));
   }
