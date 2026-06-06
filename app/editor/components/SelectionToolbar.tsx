@@ -1,3 +1,4 @@
+import { observer } from "mobx-react";
 import type { EditorState, Selection } from "prosemirror-state";
 import Suggestion from "~/editor/extensions/Suggestion";
 import { NodeSelection, TextSelection } from "prosemirror-state";
@@ -20,6 +21,7 @@ import type { MenuItem } from "@shared/editor/types";
 import useBoolean from "~/hooks/useBoolean";
 import useEventListener from "~/hooks/useEventListener";
 import useMobile from "~/hooks/useMobile";
+import useStores from "~/hooks/useStores";
 import getAttachmentMenuItems from "../menus/attachment";
 import getCodeMenuItems from "../menus/code";
 import getDividerMenuItems from "../menus/divider";
@@ -79,9 +81,12 @@ enum Toolbar {
   Menu = "menu",
 }
 
-export function SelectionToolbar(props: Props) {
+export const SelectionToolbar = observer(function SelectionToolbar(
+  props: Props
+) {
   const { readOnly = false } = props;
   const { view, extensions, commands } = useEditor();
+  const { ui } = useStores();
   const { t } = useTranslation();
   const menuRef = React.useRef<HTMLDivElement | null>(null);
   const isMobile = useMobile();
@@ -101,6 +106,15 @@ export function SelectionToolbar(props: Props) {
 
   const isEmbedSelection =
     selection instanceof NodeSelection && selection.node.type.name === "embed";
+
+  // Hide the toolbar for the artifact node that is currently open in the
+  // center viewer — the viewer covers the document, so its node menu would
+  // otherwise float on top of it.
+  const isOpenArtifactSelected =
+    selection instanceof NodeSelection &&
+    selection.node.type.name === "attachment" &&
+    !!ui.activeArtifact &&
+    selection.node.attrs.id === ui.activeArtifact.id;
 
   const isCodeSelection = isInCode(state, { onlyBlock: true });
   const isNoticeSelection = isInNotice(state);
@@ -321,7 +335,7 @@ export function SelectionToolbar(props: Props) {
   return (
     <FloatingToolbar
       align={align}
-      active={isActive}
+      active={isActive && !isOpenArtifactSelected}
       ref={menuRef}
       width={
         activeToolbar === Toolbar.Link || activeToolbar === Toolbar.Media
@@ -359,4 +373,4 @@ export function SelectionToolbar(props: Props) {
       ) : null}
     </FloatingToolbar>
   );
-}
+});

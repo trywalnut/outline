@@ -1,7 +1,9 @@
+import { observer } from "mobx-react";
 import {
   BrowserIcon,
   CloseIcon,
   CodeIcon,
+  CommentIcon,
   EyeIcon,
   OpenIcon,
   RestoreIcon,
@@ -14,6 +16,7 @@ import Flex from "~/components/Flex";
 import NudeButton from "~/components/NudeButton";
 import Tooltip from "~/components/Tooltip";
 import useKeyDown from "~/hooks/useKeyDown";
+import useStores from "~/hooks/useStores";
 import type { ActiveArtifact } from "~/stores/UiStore";
 
 type Tab = "preview" | "review" | "code";
@@ -32,6 +35,7 @@ type Props = {
  */
 function ArtifactViewer({ artifact, onClose }: Props) {
   const { t } = useTranslation();
+  const { ui } = useStores();
   const reviewRef = React.useRef<HTMLDivElement>(null);
   const [activeTab, setActiveTab] = React.useState<Tab>("preview");
   const [html, setHtml] = React.useState<string | null>(null);
@@ -83,6 +87,11 @@ function ArtifactViewer({ artifact, onClose }: Props) {
   const handleOpen = React.useCallback(() => {
     window.open(src, "_blank", "noopener,noreferrer");
   }, [src]);
+
+  const commentsOpen = ui.rightSidebar === "comments";
+  const handleToggleComments = React.useCallback(() => {
+    ui.set({ rightSidebar: commentsOpen ? null : "comments" });
+  }, [ui, commentsOpen]);
 
   React.useEffect(() => {
     if (activeTab !== "review" || html === null || !reviewRef.current) {
@@ -146,6 +155,14 @@ function ArtifactViewer({ artifact, onClose }: Props) {
               {t("Code")}
             </TabButton>
           </TabGroup>
+          <TabButton
+            type="button"
+            $active={commentsOpen}
+            onClick={handleToggleComments}
+          >
+            <CommentIcon size={16} />
+            {t("Comments")}
+          </TabButton>
           <Tooltip content={t("Reload")}>
             <NudeButton width={28} height={28} onClick={handleReload}>
               <RestoreIcon size={18} />
@@ -400,4 +417,4 @@ const Message = styled.div`
   font-size: 13px;
 `;
 
-export default ArtifactViewer;
+export default observer(ArtifactViewer);
