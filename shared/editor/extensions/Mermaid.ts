@@ -8,6 +8,7 @@ import type { Transaction } from "prosemirror-state";
 import { NodeSelection, Plugin, PluginKey } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
 import { toast } from "sonner";
+import { errToString } from "../../utils/error";
 import { isCode, isMermaid } from "../lib/isCode";
 import { isRemoteTransaction, mapDecorations } from "../lib/multiplayer";
 import { findBlockNodes } from "../queries/findChildren";
@@ -17,6 +18,7 @@ import type { Editor } from "../../../app/editor";
 import { LightboxImageFactory } from "../lib/Lightbox";
 import { hashString } from "../../utils/string";
 import { sanitizeUrl } from "../../utils/urls";
+import { isModKey } from "../../utils/keyboard";
 
 export const pluginKey = new PluginKey("mermaid");
 
@@ -26,7 +28,9 @@ export type MermaidState = {
   editingId?: string;
 };
 
-const STORAGE_PREFIX = "mermaid:";
+// The `v3` namespace discards entries cached before the foreignObject fix, so
+// previously mis-sized diagrams are re-rendered instead of served from cache.
+const STORAGE_PREFIX = "mermaid:v3:";
 const MAX_STORAGE_ENTRIES = 20;
 
 class Cache {
@@ -156,16 +160,22 @@ class MermaidRenderer {
       return;
     }
 
-    // Create a temporary element for rendering. We use visibility:hidden instead of
-    // offscreen positioning so the browser computes correct bounding boxes for SVG
-    // elements — offscreen elements can produce incorrect getBBox() results, leading
-    // to wrong viewBox dimensions (see mermaid-js/mermaid#6146).
+    // Create a temporary element for rendering. We use opacity:0 instead of
+    // visibility:hidden because browsers skip layout of <foreignObject> content
+    // inside visibility:hidden SVGs, causing mermaid's layout engine to measure
+    // zero-size nodes and produce inflated viewBox dimensions for diagram types
+    // that use foreignObject-based text (classDiagram, erDiagram,
+    // requirementDiagram). opacity:0 keeps the element in the render tree and
+    // fully laid out without being visible to the user. We previously used
+    // offscreen positioning (left:-9999px) which broke getBBox() in Chromium
+    // (mermaid-js/mermaid#6146); opacity:0 avoids both problems.
     const renderElement = document.createElement("div");
     const tempId =
       "offscreen-mermaid-" + Math.random().toString(36).substr(2, 9);
     renderElement.id = tempId;
     renderElement.style.position = "fixed";
-    renderElement.style.visibility = "hidden";
+    renderElement.style.opacity = "0";
+    renderElement.style.pointerEvents = "none";
     renderElement.style.top = "0";
     renderElement.style.left = "0";
     const width = this.editor.view?.dom.clientWidth ?? window.innerWidth;
@@ -224,15 +234,35 @@ class MermaidRenderer {
 
       const { svg, bindFunctions } = await mermaid.render(tempId, text);
 
-      // Cache the rendered SVG so we won't need to calculate it again in the same session
-      if (text) {
-        Cache.set(cacheKey, svg);
-      }
       element.classList.remove("parse-error", "empty");
       element.innerHTML = svg;
 
       // Allow the user to interact with the diagram
       bindFunctions?.(element);
+
+      // Mermaid sizes the SVG from a getBBox() taken in the hidden render
+      // element, which is unreliable on high-DPI/RDP displays and leaves
+      // diagrams too large or too small (#11782). Re-frame from the now-visible
+      // SVG, where getBBox() reflects the real content.
+      const rendered = element.querySelector("svg");
+      if (rendered instanceof SVGSVGElement) {
+        const box = rendered.getBBox();
+        if (box.width > 0 && box.height > 0) {
+          const padding = 8;
+          const frameWidth = box.width + padding * 2;
+          rendered.setAttribute(
+            "viewBox",
+            `${box.x - padding} ${box.y - padding} ${frameWidth} ${box.height + padding * 2}`
+          );
+          rendered.style.width = "100%";
+          rendered.style.maxWidth = `${frameWidth}px`;
+        }
+      }
+
+      // Cache the corrected SVG so we won't need to calculate it again this session
+      if (text) {
+        Cache.set(cacheKey, element.innerHTML);
+      }
     } catch (error) {
       const isEmpty = block.node.textContent.trim().length === 0;
 
@@ -240,7 +270,7 @@ class MermaidRenderer {
         element.innerText = "Empty diagram";
         element.classList.add("empty");
       } else {
-        element.innerText = error;
+        element.innerText = errToString(error);
         element.classList.add("parse-error");
       }
     } finally {
@@ -500,7 +530,11 @@ export default function Mermaid({
         return this.getState(state)?.decorationSet;
       },
       handleKeyDown(view, event) {
-        if (event.key === "Enter" && event.metaKey && !editor.props.readOnly) {
+        if (
+          event.key === "Enter" &&
+          isModKey(event) &&
+          !editor.props.readOnly
+        ) {
           const { selection } = view.state;
           const isNodeSel = selection instanceof NodeSelection;
           const isMermaidNode =
@@ -561,8 +595,12 @@ export default function Mermaid({
           event.preventDefault();
 
           if (isSelected || editor.props.readOnly) {
-            // Already selected or read-only, open lightbox
-            if (node && node.textContent.trim().length > 0) {
+            // Already selected or read-only, open lightbox unless the diagram
+            // failed to render (no valid image to show)
+            const hasError =
+              diagram.classList.contains("parse-error") ||
+              diagram.classList.contains("empty");
+            if (!hasError && node && node.textContent.trim().length > 0) {
               editor.updateActiveLightboxImage(
                 LightboxImageFactory.createLightboxImage(view, nodePos)
               );

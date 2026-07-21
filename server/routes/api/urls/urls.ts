@@ -75,7 +75,8 @@ router.post(
           type: UnfurlResourceType.Document,
           document,
           viewer: actor,
-          url: `${share.canonicalUrl}/doc/${document.url.replace("/doc/", "")}`,
+          anchor: urlObj.hash,
+          url: `${share.canonicalUrl}/doc/${document.url.replace("/doc/", "")}${urlObj.hash}`,
         });
         return;
       }
@@ -173,6 +174,7 @@ router.post(
           type: UnfurlResourceType.Document,
           document,
           viewer: actor,
+          anchor: urlObj.hash,
         });
         return;
       }
@@ -278,7 +280,7 @@ router.post(
         });
       });
     } catch (err) {
-      if (err.code === "ENOTFOUND") {
+      if (err instanceof Error && "code" in err && err.code === "ENOTFOUND") {
         throw NotFoundError("No CNAME record found");
       }
 

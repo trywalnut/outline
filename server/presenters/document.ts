@@ -103,30 +103,29 @@ async function presentDocument(
   }
 
   if (!options.isPublic) {
-    const source = document.import ?? (await document.$get("import"));
-
     res.tasks = document.tasks;
     res.isCollectionDeleted = await document.isCollectionDeleted();
     res.collectionId = document.collectionId;
     res.parentDocumentId = document.parentDocumentId;
     res.createdBy = presentUser(document.createdBy);
     res.updatedBy = presentUser(document.updatedBy);
-    res.collaboratorIds = document.collaboratorIds;
+    res.collaboratorIds = document.collaboratorIds ?? [];
     res.templateId = document.templateId;
     res.insightsEnabled = document.insightsEnabled;
     res.popularityScore = document.popularityScore;
     if (options.includeCommentCount) {
       res.commentCount = await document.commentCount;
     }
-    res.sourceMetadata = document.sourceMetadata
-      ? {
-          importedAt: source?.createdAt ?? document.createdAt,
-          importType: source?.format,
-          createdByName: document.sourceMetadata.createdByName,
-          fileName: document.sourceMetadata?.fileName,
-          originalDocumentId: document.sourceMetadata?.originalDocumentId,
-        }
-      : undefined;
+    if (document.sourceMetadata) {
+      const source = document.import ?? (await document.$get("import"));
+      res.sourceMetadata = {
+        importedAt: source?.createdAt ?? document.createdAt,
+        importType: source?.format,
+        createdByName: document.sourceMetadata.createdByName,
+        fileName: document.sourceMetadata?.fileName,
+        originalDocumentId: document.sourceMetadata?.originalDocumentId,
+      };
+    }
   }
 
   return res;

@@ -11,6 +11,7 @@ import {
   Redirect,
 } from "react-router-dom";
 import styled from "styled-components";
+import { toError } from "@shared/utils/error";
 import { s } from "@shared/styles";
 import { StatusFilter } from "@shared/types";
 import type Collection from "~/models/Collection";
@@ -50,7 +51,7 @@ import Overview from "./components/Overview";
 import { Header } from "./components/Header";
 import usePersistedState from "~/hooks/usePersistedState";
 import useCurrentUser from "~/hooks/useCurrentUser";
-import { ProsemirrorHelper } from "@shared/utils/ProsemirrorHelper";
+import { ProsemirrorDataHelper } from "@shared/utils/ProsemirrorDataHelper";
 
 const CollectionScene = observer(function CollectionScene_() {
   const params = useParams<{ collectionSlug?: string }>();
@@ -72,7 +73,7 @@ const CollectionScene = observer(function CollectionScene_() {
   const collection = collections.get(id);
   const can = usePolicy(collection);
   const hasDescription = collection?.data
-    ? !ProsemirrorHelper.isEmptyData(collection.data)
+    ? !ProsemirrorDataHelper.isEmpty(collection.data)
     : false;
 
   const { pins, count } = usePinnedDocuments(urlId, collection?.id);
@@ -109,7 +110,7 @@ const CollectionScene = observer(function CollectionScene_() {
         setError(undefined);
         await collections.fetch(id);
       } catch (err) {
-        setError(err);
+        setError(toError(err));
       }
     }
 
@@ -179,7 +180,7 @@ const CollectionScene = observer(function CollectionScene_() {
           <Notices collection={collection} />
           <Header
             collection={collection}
-            isEditing={isEditRoute && !!user?.separateEditMode}
+            isEditing={isEditRoute || !user?.separateEditMode}
           />
 
           <PinnedDocuments

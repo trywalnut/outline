@@ -21,6 +21,7 @@ import Widget from "../components/Widget";
 import FileHelper from "../lib/FileHelper";
 import type { MarkdownSerializerState } from "../lib/markdown/serializer";
 import { commentedImagePlugin } from "../plugins/CommentedImagePlugin";
+import { isPDFAttachment } from "../queries/isPDFAttachment";
 import attachmentsRule from "../rules/links";
 import type { ComponentProps } from "../types";
 import Node from "./Node";
@@ -138,11 +139,7 @@ export default class Attachment extends Node {
       </>
     );
 
-    if (
-      node.attrs.preview &&
-      !embedsDisabled &&
-      node.attrs.contentType === "application/pdf"
-    ) {
+    if (node.attrs.preview && !embedsDisabled && isPDFAttachment(node)) {
       return (
         <PdfViewer
           icon={<FileExtension title={node.attrs.title} />}
@@ -281,7 +278,7 @@ export default class Attachment extends Node {
         const { node } = state.selection;
 
         if (
-          node.attrs.contentType !== "application/pdf" &&
+          !isPDFAttachment(node) &&
           !FileHelper.isHtml(node.attrs.contentType, node.attrs.title)
         ) {
           return false;
@@ -351,7 +348,7 @@ function getAttachmentAccept(node: ProsemirrorNode) {
     return null;
   }
 
-  if (node.attrs.contentType === "application/pdf") {
+  if (isPDFAttachment(node)) {
     return ".pdf,application/pdf";
   }
 

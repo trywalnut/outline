@@ -23,6 +23,8 @@ node_modules
 **/*.test.jsx
 **/__tests__
 **/__mocks__
+**/__snapshots__
+**/test/fixtures
 
 # Arrow fork: BDD test files live in outline-doc/ as symlinks; not needed in image
 features

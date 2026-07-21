@@ -29,6 +29,20 @@ describe("POST /mcp/", () => {
       expect(res.status).toEqual(401);
     });
 
+    it("should include WWW-Authenticate header on 401 responses", async () => {
+      const { body } = mcpRequest("tools/list");
+      const res = await server.post("/mcp/", {
+        headers: { Accept: "application/json, text/event-stream" },
+        body,
+      });
+      expect(res.status).toEqual(401);
+      const wwwAuth = res.headers.get("www-authenticate");
+      expect(wwwAuth).toBeTruthy();
+      expect(wwwAuth).toContain("Bearer");
+      expect(wwwAuth).toContain("resource_metadata=");
+      expect(wwwAuth).toContain("/.well-known/oauth-protected-resource/mcp");
+    });
+
     it("should reject JWT authentication", async () => {
       const user = await buildUser();
       const { body } = mcpRequest("tools/list");
@@ -90,6 +104,17 @@ describe("POST /mcp/", () => {
       expect(result).toBeDefined();
       expect(result?.capabilities).toBeDefined();
       expect(result?.serverInfo?.name).toEqual("outline");
+    });
+
+    it("should return 202 for the notifications/initialized lifecycle message", async () => {
+      const { accessToken } = await buildOAuthUser();
+
+      const res = await server.post("/mcp/", {
+        headers: mcpHeaders(accessToken),
+        body: { jsonrpc: "2.0", method: "notifications/initialized" },
+      });
+
+      expect(res.status).toEqual(202);
     });
 
     it("should set the MCP flag on the user after a successful request", async () => {

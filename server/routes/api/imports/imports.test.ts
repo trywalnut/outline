@@ -59,6 +59,12 @@ describe("#imports.create", () => {
     const integration = await buildIntegration({
       userId: admin.id,
       teamId: admin.teamId,
+      service: IntegrationService.Notion,
+      type: IntegrationType.Import,
+      settings: {
+        externalWorkspace: { id: "ws-1", name: "Test Workspace" },
+        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
     });
     const input: NotionImportInput = [
       { permission: CollectionPermission.Read },
@@ -177,24 +183,27 @@ describe("#imports.info", () => {
 });
 
 describe("#imports.delete", () => {
-  it("should delete the import", async () => {
-    const admin = await buildAdmin();
-    const importModel = await buildImport({
-      state: ImportState.Completed,
-      createdById: admin.id,
-      teamId: admin.teamId,
-    });
+  it.each([ImportState.Completed, ImportState.Errored, ImportState.Canceled])(
+    "should delete the import when in %s state",
+    async (state) => {
+      const admin = await buildAdmin();
+      const importModel = await buildImport({
+        state,
+        createdById: admin.id,
+        teamId: admin.teamId,
+      });
 
-    const res = await server.post("/api/imports.delete", admin, {
-      body: {
-        id: importModel.id,
-      },
-    });
-    const body = await res.json();
+      const res = await server.post("/api/imports.delete", admin, {
+        body: {
+          id: importModel.id,
+        },
+      });
+      const body = await res.json();
 
-    expect(res.status).toEqual(200);
-    expect(body.success).toEqual(true);
-  });
+      expect(res.status).toEqual(200);
+      expect(body.success).toEqual(true);
+    }
+  );
 
   it("should throw error when import is not in deletable state", async () => {
     const admin = await buildAdmin();

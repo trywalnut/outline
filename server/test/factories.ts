@@ -52,6 +52,7 @@ import {
   Template,
 } from "@server/models";
 import { RelationshipType } from "@server/models/Relationship";
+import { SearchQuerySource } from "@server/models/SearchQuery";
 import AttachmentHelper from "@server/models/helpers/AttachmentHelper";
 import { hash } from "@server/utils/crypto";
 import { OAuthInterface } from "@server/utils/oauth/OAuthInterface";
@@ -576,18 +577,25 @@ export async function buildImport(overrides: Partial<Import<any>> = {}) {
     overrides.integrationId = integration.id;
   }
 
+  // Skip BeforeCreate hooks so tests can seed multiple imports per team. The
+  // production "one in-progress import per team" rule is enforced by the
+  // Import.checkInProgress hook; tests don't need to abide by it.
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-  return Import.create<Import<any>>({
-    name: "testImport",
-    service: IntegrationService.Notion,
-    state: ImportState.Created,
-    input: [
-      {
-        permission: CollectionPermission.Read,
-      },
-    ],
-    ...overrides,
-  });
+  return Import.create<Import<any>>(
+    {
+      name: "testImport",
+      service: IntegrationService.Notion,
+      state: ImportState.Created,
+      input: [
+        {
+          permission: CollectionPermission.Read,
+        },
+      ],
+      ...overrides,
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any,
+    { hooks: false }
+  );
 }
 
 export async function buildAttachment(
@@ -756,7 +764,7 @@ export async function buildSearchQuery(
   }
 
   if (!overrides.source) {
-    overrides.source = "app";
+    overrides.source = SearchQuerySource.App;
   }
 
   if (isNil(overrides.query)) {

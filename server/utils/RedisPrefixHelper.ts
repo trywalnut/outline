@@ -44,6 +44,16 @@ export class RedisPrefixHelper {
   }
 
   /**
+   * Gets key for caching a team's enabled webhook subscriptions.
+   *
+   * @param teamId The team ID to generate a key for.
+   * @returns the cache key string.
+   */
+  public static getWebhookSubscriptionsKey(teamId: string) {
+    return `whs:${teamId}`;
+  }
+
+  /**
    * Gets key for caching the count of a relationship managed by the
    * `CounterCache` decorator.
    *
@@ -58,5 +68,17 @@ export class RedisPrefixHelper {
     id: string
   ) {
     return `count:${modelName}:${relationName}:${id}`;
+  }
+
+  /**
+   * Gets key for storing an auth provider's token used as a logout hint during
+   * provider-initiated logout, referenced by a short session identifier.
+   *
+   * @param provider The auth provider id (e.g. "oidc").
+   * @param sessionId The logout session identifier to generate a key for.
+   * @returns the cache key string.
+   */
+  public static getLogoutTokenKey(provider: string, sessionId: string) {
+    return `auth:logout:${provider}:${sessionId}`;
   }
 }

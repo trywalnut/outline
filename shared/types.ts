@@ -121,6 +121,7 @@ export enum MentionType {
   PullRequest = "pull_request",
   Project = "project",
   URL = "url",
+  Date = "date",
 }
 
 export type PublicEnv = {
@@ -167,16 +168,23 @@ export enum IntegrationService {
   Figma = "figma",
   Notion = "notion",
   Markdown = "markdown",
+  Slab = "slab",
+  JSON = "json",
 }
 
 export type ImportableIntegrationService = Extract<
   IntegrationService,
-  IntegrationService.Notion | IntegrationService.Markdown
+  | IntegrationService.Notion
+  | IntegrationService.Markdown
+  | IntegrationService.Slab
+  | IntegrationService.JSON
 >;
 
 export const ImportableIntegrationService = {
   Notion: IntegrationService.Notion,
   Markdown: IntegrationService.Markdown,
+  Slab: IntegrationService.Slab,
+  JSON: IntegrationService.JSON,
 } as const;
 
 export type IssueTrackerIntegrationService = Extract<
@@ -334,6 +342,8 @@ export enum UserPreference {
   FullWidthDocuments = "fullWidthDocuments",
   /** Whether to sort the comments by their order in the document. */
   SortCommentsByOrderInDocument = "sortCommentsByOrderInDocument",
+  /** Whether to display a comment indicator in the gutter beside commented lines. */
+  CommentsInGutter = "commentsInGutter",
   /** Whether smart text replacements should be enabled. */
   EnableSmartText = "enableSmartText",
   /** The style of notification badge to display. */
@@ -356,6 +366,7 @@ export type UserPreferences = {
   [UserPreference.SeamlessEdit]?: boolean;
   [UserPreference.FullWidthDocuments]?: boolean;
   [UserPreference.SortCommentsByOrderInDocument]?: boolean;
+  [UserPreference.CommentsInGutter]?: boolean;
   [UserPreference.EnableSmartText]?: boolean;
   [UserPreference.NotificationBadge]?: NotificationBadgeType;
 };
@@ -400,6 +411,15 @@ export enum EmailDisplay {
   Everyone = "everyone",
 }
 
+export enum CommentingAccess {
+  /** No one can comment. */
+  None = "none",
+  /** Only members can comment. */
+  Members = "members",
+  /** Members and guests can comment. */
+  Everyone = "everyone",
+}
+
 export enum TeamPreference {
   /** Whether documents have a separate edit mode instead of always editing. */
   SeamlessEdit = "seamlessEdit",
@@ -415,7 +435,7 @@ export enum TeamPreference {
   MembersCanDeleteAccount = "membersCanDeleteAccount",
   /** Whether notification emails include document and comment content. */
   PreviewsInEmails = "previewsInEmails",
-  /** Whether users can comment on documents. */
+  /** Who can comment on documents. */
   Commenting = "commenting",
   /** The custom theme for the team. */
   CustomTheme = "customTheme",
@@ -439,7 +459,7 @@ export type TeamPreferences = {
   [TeamPreference.MembersCanCreateApiKey]?: boolean;
   [TeamPreference.MembersCanDeleteAccount]?: boolean;
   [TeamPreference.PreviewsInEmails]?: boolean;
-  [TeamPreference.Commenting]?: boolean;
+  [TeamPreference.Commenting]?: CommentingAccess;
   [TeamPreference.CustomTheme]?: Partial<CustomTheme>;
   [TeamPreference.TocPosition]?: TOCPosition;
   [TeamPreference.PreventDocumentEmbedding]?: boolean;

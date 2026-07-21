@@ -2,8 +2,8 @@ import { observer } from "mobx-react";
 import * as React from "react";
 import type { RouteComponentProps, StaticContext } from "react-router";
 import { Redirect, useLocation } from "react-router";
-import { TeamPreference } from "@shared/types";
-import { ProsemirrorHelper } from "@shared/utils/ProsemirrorHelper";
+import { toError } from "@shared/utils/error";
+import { ProsemirrorDataHelper } from "@shared/utils/ProsemirrorDataHelper";
 import { RevisionHelper } from "@shared/utils/RevisionHelper";
 import type Document from "~/models/Document";
 import type Revision from "~/models/Revision";
@@ -105,7 +105,7 @@ function DataLoader({ match, children }: Props) {
           force: missingPolicy,
         });
       } catch (err) {
-        setError(err);
+        setError(toError(err));
       }
     }
     void fetchDocument();
@@ -152,7 +152,7 @@ function DataLoader({ match, children }: Props) {
             documentId: document.id,
           });
         } catch (err) {
-          Logger.error("Failed to fetch views", err);
+          Logger.error("Failed to fetch views", toError(err));
         }
       }
     }
@@ -169,7 +169,7 @@ function DataLoader({ match, children }: Props) {
         {
           collectionId: nested ? undefined : document.collectionId,
           parentDocumentId: nested ? document.id : document.parentDocumentId,
-          data: ProsemirrorHelper.getEmptyDocument(),
+          data: ProsemirrorDataHelper.getEmpty(),
           ...params,
         },
         {
@@ -197,7 +197,7 @@ function DataLoader({ match, children }: Props) {
       // Prevents unauthorized request to load share information for the document
       // when viewing a public share link
       if (can.read && !document.isDeleted && !revisionId) {
-        if (team.getPreference(TeamPreference.Commenting)) {
+        if (team.commentingEnabled) {
           void comments.fetchAll({
             documentId: document.id,
             limit: 100,

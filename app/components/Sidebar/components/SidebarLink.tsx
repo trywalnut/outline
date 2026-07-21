@@ -299,7 +299,6 @@ const Link = styled(NavLink)<{
   min-height: 30px;
   user-select: none;
   white-space: nowrap;
-  margin-top: 1px;
   background: var(--background);
   color: ${(props) =>
     props.$isActiveDrop ? props.theme.white : props.theme.sidebarText};
@@ -335,7 +334,8 @@ const Link = styled(NavLink)<{
     transition: fill 50ms;
   }
 
-  &: ${hover} {
+  &: ${hover},
+  &:has([data-state="open"]) {
     ${HiddenDisclosure} {
       display: block;
     }
@@ -353,7 +353,9 @@ const Link = styled(NavLink)<{
   `}
 
   @media (hover: hover) {
-    &:hover ${Actions}, &:active ${Actions} {
+    &:hover ${Actions},
+    &:active ${Actions},
+    &:has([data-state="open"]) ${Actions} {
       visibility: visible;
 
       svg {
@@ -361,7 +363,8 @@ const Link = styled(NavLink)<{
       }
     }
 
-    &:hover {
+    &:hover,
+    &:has([data-state="open"]) {
       color: ${(props) =>
         props.$isActiveDrop ? props.theme.white : props.theme.text};
     }

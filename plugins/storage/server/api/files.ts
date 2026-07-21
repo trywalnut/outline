@@ -44,7 +44,7 @@ const htmlPreviewContentSecurityPolicy = [
 router.post(
   "files.create",
   rateLimiter(RateLimiterStrategy.TwentyFivePerMinute),
-  auth(),
+  auth({ optional: true }),
   validate(T.FilesCreateSchema),
   timeout(30 * 60 * 1000), // 30 minutes for large file uploads
   multipart({
@@ -55,15 +55,27 @@ router.post(
   }),
   async (ctx: APIContext<T.FilesCreateReq>) => {
     const actor = ctx.state.auth.user;
-    const { key } = ctx.input.body;
+    const { key, sig } = ctx.input.body;
     const file = ctx.input.file;
+
+    if (!file) {
+      throw ValidationError("Request must include a file parameter");
+    }
+
+    // A short-lived signature authorizes the upload to this key without a session.
+    if (sig) {
+      verifyUploadSignature(sig, key);
+    } else if (!actor) {
+      throw AuthenticationError("Authentication required");
+    }
 
     const attachment = await Attachment.findOne({
       where: { key },
       rejectOnEmpty: true,
     });
 
-    if (attachment.userId !== actor.id) {
+    // For session-based uploads, ensure the attachment belongs to the actor.
+    if (!sig && actor && attachment.userId !== actor.id) {
       throw AuthorizationError("Invalid key");
     }
 
@@ -80,7 +92,7 @@ router.post(
     try {
       await attachment.writeFile(file);
     } catch (err) {
-      if (err.message.includes("permission denied")) {
+      if (err instanceof Error && err.message.includes("permission denied")) {
         throw Error(
           `Permission denied writing to "${key}". Check the host machine file system permissions.`
         );
@@ -205,6 +217,28 @@ function getByteRange(
   const end = parseInt(match[2], 10) || size - 1;
 
   return { start, end };
+}
+
+/**
+ * Verifies a short-lived signature authorizing an upload to a single key.
+ *
+ * @param sig The signature to verify.
+ * @param key The key the upload is being made to.
+ * @throws AuthenticationError if the signature is invalid, expired, or scoped
+ * to a different key.
+ */
+function verifyUploadSignature(sig: string, key: string) {
+  const payload = getJWTPayload(sig);
+
+  if (payload.type !== "attachment-upload" || payload.key !== key) {
+    throw AuthenticationError("Invalid signature");
+  }
+
+  try {
+    JWT.verify(sig, env.SECRET_KEY);
+  } catch (_err) {
+    throw AuthenticationError("Invalid signature");
+  }
 }
 
 function getKeyFromContext(ctx: APIContext<T.FilesGetReq>): string {

@@ -1,4 +1,4 @@
-import type { TFunction } from "i18next";
+import { t } from "i18next";
 import {
   TrashIcon,
   CommentIcon,
@@ -7,21 +7,24 @@ import {
   PDFIcon,
   BrowserIcon,
 } from "outline-icons";
-import { NodeSelection, type EditorState } from "prosemirror-state";
+import { NodeSelection } from "prosemirror-state";
 import FileHelper from "@shared/editor/lib/FileHelper";
-import type { MenuItem } from "@shared/editor/types";
 import { isNodeActive } from "@shared/editor/queries/isNodeActive";
+import { isPDFAttachmentActive } from "@shared/editor/queries/isPDFAttachment";
+import type { MenuItem, SelectionContext } from "@shared/editor/types";
 
-export default function attachmentMenuItems(
-  state: EditorState,
-  readOnly: boolean,
-  t: TFunction
-): MenuItem[] {
-  if (readOnly) {
+/**
+ * Returns menu items for the attachment selection toolbar.
+ *
+ * @param ctx - the current selection context.
+ * @returns an array of menu items.
+ */
+export default function attachmentMenuItems(ctx: SelectionContext): MenuItem[] {
+  if (ctx.readOnly) {
     return [];
   }
 
-  const { schema } = state;
+  const { schema, state } = ctx;
   const isAttachmentWithPreview = isNodeActive(schema.nodes.attachment, {
     preview: true,
   });
@@ -30,8 +33,7 @@ export default function attachmentMenuItems(
     state.selection.node.type === schema.nodes.attachment
       ? state.selection.node
       : undefined;
-  const isPdfAttachment =
-    selectedAttachment?.attrs.contentType === "application/pdf";
+  const isPdfAttachment = isPDFAttachmentActive(state);
   const isHtmlAttachment = FileHelper.isHtml(
     selectedAttachment?.attrs.contentType,
     selectedAttachment?.attrs.title

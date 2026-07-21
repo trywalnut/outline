@@ -82,8 +82,7 @@ const mathStyle = (props: Props) => css`
 
     .ProseMirror-focused {
       border-radius: 2px;
-      outline: 2px solid
-        ${props.readOnly ? "transparent" : props.theme.selected};
+      outline: none;
     }
   }
 
@@ -404,15 +403,14 @@ const diffStyle = (props: Props) => css`
   }
 `;
 
-const findAndReplaceStyle = () => css`
+const findAndReplaceStyle = (props: Props) => css`
   & ::highlight(search-results) {
     background-color: rgba(255, 213, 0, 0.25);
-    color: inherit;
   }
 
   & ::highlight(search-results-current) {
     background-color: rgba(255, 213, 0, 0.75);
-    color: inherit;
+    color: ${props.theme.textHighlightForeground};
   }
 
   .find-result:not(:has(.mention)),
@@ -424,6 +422,7 @@ const findAndReplaceStyle = () => css`
   .find-result.current-result .mention {
     background: rgba(255, 213, 0, 0.75);
     animation: ${pulse("rgba(255, 213, 0, 0.75)")} 150ms 1;
+    color: ${props.theme.textHighlightForeground};
   }
 `;
 
@@ -570,6 +569,12 @@ width: 100%;
     gap: 0;
   }
 
+  /* Date mentions are plain text, so they inherit the surrounding font weight
+     (e.g. bold when placed inside a heading). */
+  &[data-type="date"] {
+    font-weight: inherit;
+  }
+
   &.mention-user::before {
     content: "@";
   }
@@ -596,7 +601,7 @@ width: 100%;
   padding: ${props.editorStyle?.padding ?? "initial"};
   margin: ${props.editorStyle?.margin ?? "initial"};
 
-  & > .ProseMirror-yjs-cursor {
+  & > .${EditorStyleHelper.multiplayerCursor} {
     display: none;
   }
 
@@ -642,7 +647,6 @@ width: 100%;
         font-weight: 500;
         line-height: 0;
         margin-left: -24px;
-        transition: opacity 150ms ease-in-out;
         opacity: 0;
         width: 24px;
       }
@@ -653,10 +657,13 @@ width: 100%;
       }
     }
 
-    &:hover,
-    &:focus-within {
-      .heading-actions {
-        opacity: 1;
+    &:hover {
+      .heading-anchor {
+        opacity: 0.75;
+
+        &:hover {
+          opacity: 1;
+        }
       }
     }
   }
@@ -670,11 +677,11 @@ width: 100%;
   h5 { font-size: var(--font-size-h5); }
   h6 { font-size: var(--font-size-h6); }
 
-  .ProseMirror-yjs-selection {
+  .${EditorStyleHelper.multiplayerSelection} {
     transition: background-color 500ms ease-in-out;
   }
 
-  .ProseMirror-yjs-cursor {
+  .${EditorStyleHelper.multiplayerCursor} {
     position: relative;
     margin-left: -1px;
     margin-right: -1px;
@@ -682,6 +689,7 @@ width: 100%;
     border-right: 1px solid black;
     height: 1em;
     word-break: normal;
+    user-select: none;
 
     &::after {
       content: "";
@@ -719,7 +727,7 @@ width: 100%;
   }
 }
 
-&.show-cursor-names .ProseMirror-yjs-cursor > div {
+&.show-cursor-names .${EditorStyleHelper.multiplayerCursor} > div {
   opacity: 1;
 }
 
@@ -762,6 +770,19 @@ iframe.embed {
   .ProseMirror-selectednode img {
     pointer-events: initial;
   }
+}
+
+.image .image-wrapper,
+.image .image-wrapper img {
+  width: var(--image-width, auto);
+}
+
+/* Inside auto-layout table cells the plain pixel width would expand the cell  */
+td .image .image-wrapper,
+th .image .image-wrapper,
+td .image .image-wrapper img,
+th .image .image-wrapper img {
+  width: min(var(--image-width), 100%);
 }
 
 .image.placeholder,
@@ -822,34 +843,20 @@ iframe.embed {
   }
 }
 
-.pdf {
-  position: relative;
-  width: max-content;
-  height: max-content;
-  margin-right: auto;
-  margin-left: auto;
-  max-width: 100%;
-  clear: both;
-  z-index: 1;
-  transition-property: width, height;
-  transition-duration: 80ms;
-  transition-timing-function: ease-in-out;
-
-  embed {
-    display: block;
-    max-width: 100%;
-    contain: strict,
-    content-visibility: auto,
-    backface-visibility: hidden,
-    transition-property: width, height;
-    transition-duration: 80ms;
-    transition-timing-function: ease-in-out;
-  }
-}
-
 .image-replacement-uploading {
   img {
     opacity: 0.5;
+  }
+}
+
+.image-icon {
+  display: inline-block;
+  text-align: initial;
+  clear: initial;
+  vertical-align: text-bottom;
+
+  .image-wrapper {
+    margin: 0;
   }
 }
 
@@ -968,6 +975,11 @@ img.ProseMirror-separator {
   display: block;
 }
 
+.component-image:has(.image-icon) {
+  display: inline-block;
+  vertical-align: text-bottom;
+}
+
 .image-commented .image-wrapper,
 .image-commented .widget {
   outline: ${props.theme.commentedImageOutlineLight} solid 2px;
@@ -1024,7 +1036,7 @@ img.ProseMirror-separator {
 
 .${EditorStyleHelper.headingPositionAnchor}:first-child,
 // Edge case where multiplayer cursor is between start of cell and heading
-.${EditorStyleHelper.headingPositionAnchor}:first-child + .ProseMirror-yjs-cursor,
+.${EditorStyleHelper.headingPositionAnchor}:first-child + .${EditorStyleHelper.multiplayerCursor},
 // Edge case where table grips are between start of cell and heading
 .${EditorStyleHelper.headingPositionAnchor}:first-child + [role=button] + [role=button] {
   & + h1,
@@ -1076,6 +1088,9 @@ h6:not(.placeholder)::before {
     &:not(.placeholder)::before {
       opacity: 1;
     }
+    &:hover:not(.placeholder)::before {
+      opacity: 0;
+    }
   }
 }
 
@@ -1126,85 +1141,37 @@ h6:not(.placeholder)::before {
   top: -0.1em;
 }
 
-.heading-anchor,
-.heading-fold {
-  display: inline-block;
+.heading-anchor {
+  display: none;
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  margin-left: -26px;
+  width: 26px;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  user-select: none;
   color: ${props.theme.text};
-  opacity: .75;
   cursor: var(--pointer);
   background: none;
   outline: none;
   border: 0;
-  margin: 0;
   padding: 0;
-  text-align: start;
   font-weight: 500;
   font-family: ${props.theme.fontFamilyMono};
-  font-size: 14px;
-  line-height: 0;
-  width: 12px;
-  height: 24px;
+  font-size: 16px;
+  line-height: 1;
+  box-sizing: border-box;
 
-  &:focus,
   &:hover {
     opacity: 1;
   }
-}
-
-.ProseMirror.exported {
-  .heading-fold {
-    display: none;
-  }
-}
-
-.heading-anchor {
-  box-sizing: border-box;
-}
-
-.heading-actions {
-  opacity: 0;
-  user-select: none;
-  background: ${props.theme.background};
-  margin-left: -26px;
-  flex-direction: row;
-  display: none;
-  position: absolute;
-  left: 0;
-  top: calc(.5em - 6px);
-  width: 26px;
-  height: 24px;
 
   &:dir(rtl) {
     margin-left: 0;
     margin-right: -26px;
-  }
-
-  &.collapsed {
-    opacity: 1;
-  }
-
-  &.collapsed .heading-anchor {
-    opacity: 0;
-  }
-
-  &.collapsed .heading-fold {
-    opacity: 1;
-  }
-}
-
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-  &:hover {
-    .heading-anchor {
-      opacity: 0.75 !important;
-    }
-    .heading-anchor:hover {
-      opacity: 1 !important;
-    }
   }
 }
 
@@ -1215,31 +1182,12 @@ h6 {
   h4,
   h5,
   h6 {
-    .heading-actions {
+    .heading-anchor {
       display: inline-flex;
     }
     &:not(.placeholder)::before {
       display: ${props.readOnly ? "none" : "inline-block"};
     }
-  }
-}
-
-.heading-fold {
-  display: inline-block;
-  transform-origin: center;
-  padding: 0;
-
-  &.collapsed {
-    svg {
-      transform: rotate(-90deg);
-      pointer-events: none;
-    }
-    transition-delay: 0.1s;
-    opacity: 1;
-  }
-
-  &:dir(rtl).collapsed svg {
-    transform: rotate(90deg);
   }
 }
 
@@ -1292,6 +1240,7 @@ ${
 .notice-block {
   display: flex;
   align-items: center;
+  position: relative;
   background: ${transparentize(0.9, props.theme.noticeInfoBackground)};
   border-left: 4px solid ${props.theme.noticeInfoBackground};
   color: ${props.theme.noticeInfoText};
@@ -1421,8 +1370,23 @@ p {
   min-height: 1.6em;
 }
 
+/* Make top-level paragraphs a positioning context so the comment gutter anchors
+   to them (flush with the content column) */
+.ProseMirror > p {
+  position: relative;
+}
+
 .heading-content {
   position: relative;
+}
+
+/* The heading is taller than the line, so pin the gutter vertically to center
+   its indicators against the text. Horizontal alignment is handled by the
+   gutter's own rule. */
+.heading-content .${EditorStyleHelper.commentGutter} {
+  top: 0;
+  bottom: 0;
+  justify-content: center;
 }
 
 .heading-content a,
@@ -1503,11 +1467,11 @@ ol li {
 .${EditorStyleHelper.checklistWrapper} {
   position: relative;
   margin: 1em 0;
+}
 
-  .${EditorStyleHelper.checklistWrapper} {
-    position: static;
-    margin: 0;
-  }
+li .${EditorStyleHelper.checklistWrapper} {
+  position: static;
+  margin: 0;
 }
 
 .${EditorStyleHelper.checklistCompletedToggle} {
@@ -1641,13 +1605,16 @@ ul.checkbox_list > li {
 }
 
 ul.checkbox_list {
+  & > li > span[contenteditable="false"] {
+    cursor: text;
+  }
+
   .checkbox {
     display: inline-block;
     cursor: var(--pointer);
     pointer-events: ${
       props.readOnly && !props.readOnlyWriteCheckboxes ? "none" : "initial"
     };
-    opacity: ${props.readOnly && !props.readOnlyWriteCheckboxes ? 0.75 : 1};
     width: 14px;
     height: 14px;
     position: relative;
@@ -1656,23 +1623,65 @@ ul.checkbox_list {
     opacity: .8;
     margin: 0 0.5em 0 0;
 
-    background-image: ${`url("data:image/svg+xml,%3Csvg width='14' height='14' viewBox='0 0 14 14' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M3 0C1.34315 0 0 1.34315 0 3V11C0 12.6569 1.34315 14 3 14H11C12.6569 14 14 12.6569 14 11V3C14 1.34315 12.6569 0 11 0H3ZM3 2C2.44772 2 2 2.44772 2 3V11C2 11.5523 2.44772 12 3 12H11C11.5523 12 12 11.5523 12 11V3C12 2.44772 11.5523 2 11 2H3Z' fill='${props.theme.text.replace(
-      "#",
-      "%23"
-    )}' /%3E%3C/svg%3E%0A");`}
-
     &[aria-checked=true] {
-        opacity: 1;
-        background-image: ${`url(
-            "data:image/svg+xml,%3Csvg width='14' height='14' viewBox='0 0 14 14' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M3 0C1.34315 0 0 1.34315 0 3V11C0 12.6569 1.34315 14 3 14H11C12.6569 14 14 12.6569 14 11V3C14 1.34315 12.6569 0 11 0H3ZM4.26825 5.85982L5.95873 7.88839L9.70003 2.9C10.0314 2.45817 10.6582 2.36863 11.1 2.7C11.5419 3.03137 11.6314 3.65817 11.3 4.1L6.80002 10.1C6.41275 10.6164 5.64501 10.636 5.2318 10.1402L2.7318 7.14018C2.37824 6.71591 2.43556 6.08534 2.85984 5.73178C3.28412 5.37821 3.91468 5.43554 4.26825 5.85982Z' fill='${props.theme.accent.replace(
-              "#",
-              "%23"
-            )}' /%3E%3C/svg%3E%0A"
-        )`};
+      opacity: 1;
     }
 
     &:active {
       transform: scale(0.9);
+    }
+
+    svg {
+      display: block;
+      width: 14px;
+      height: 14px;
+      overflow: visible;
+    }
+
+    .checkbox-box {
+      fill: ${props.theme.accent};
+      fill-opacity: 0;
+      stroke: ${props.theme.text};
+      stroke-width: 2;
+      transition: fill-opacity 100ms ease-in-out, stroke 100ms ease-in-out;
+    }
+
+    .checkbox-tick {
+      fill: none;
+      stroke: ${props.theme.accentText};
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-dasharray: 14;
+      stroke-dashoffset: 14;
+      transition: stroke-dashoffset 200ms ease-in-out;
+    }
+
+    &[aria-checked=true] {
+      .checkbox-box {
+        fill-opacity: 1;
+        stroke: ${props.theme.accent};
+      }
+      .checkbox-tick {
+        stroke-dashoffset: 0;
+      }
+    }
+
+    /* Static fallback for environments without inline SVG (e.g. SSR) */
+    &:not(:has(svg)) {
+      background-image: ${`url("data:image/svg+xml,%3Csvg width='14' height='14' viewBox='0 0 14 14' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M3 0C1.34315 0 0 1.34315 0 3V11C0 12.6569 1.34315 14 3 14H11C12.6569 14 14 12.6569 14 11V3C14 1.34315 12.6569 0 11 0H3ZM3 2C2.44772 2 2 2.44772 2 3V11C2 11.5523 2.44772 12 3 12H11C11.5523 12 12 11.5523 12 11V3C12 2.44772 11.5523 2 11 2H3Z' fill='${props.theme.text.replace(
+        /#/g,
+        "%23"
+      )}' /%3E%3C/svg%3E%0A");`}
+
+      &[aria-checked=true] {
+        background-image: ${`url(
+            "data:image/svg+xml,%3Csvg width='14' height='14' viewBox='0 0 14 14' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath fill-rule='evenodd' clip-rule='evenodd' d='M3 0C1.34315 0 0 1.34315 0 3V11C0 12.6569 1.34315 14 3 14H11C12.6569 14 14 12.6569 14 11V3C14 1.34315 12.6569 0 11 0H3ZM4.26825 5.85982L5.95873 7.88839L9.70003 2.9C10.0314 2.45817 10.6582 2.36863 11.1 2.7C11.5419 3.03137 11.6314 3.65817 11.3 4.1L6.80002 10.1C6.41275 10.6164 5.64501 10.636 5.2318 10.1402L2.7318 7.14018C2.37824 6.71591 2.43556 6.08534 2.85984 5.73178C3.28412 5.37821 3.91468 5.43554 4.26825 5.85982Z' fill='${props.theme.accent.replace(
+              /#/g,
+              "%23"
+            )}' /%3E%3C/svg%3E%0A"
+        )`};
+      }
     }
   }
 
@@ -1726,31 +1735,15 @@ code {
   font-family: ${props.theme.fontFamilyMono};
   font-size: 90%;
 
+  &.inline {
+    color: ${props.theme.codeKeyword};
+  }
+
   .${EditorStyleHelper.codeWord} {
     @media (min-width: ${breakpoints.tablet}px) {
       white-space: nowrap;
     }
-    color: ${props.theme.codeKeyword};
   }
-}
-
-.${EditorStyleHelper.hexColorSwatch} {
-  display: inline-block;
-  width: 0.75em;
-  height: 0.75em;
-  margin-left: 0.3em;
-  vertical-align: -0.05em;
-  border-radius: 50%;
-  background-clip: padding-box;
-  cursor: var(--pointer);
-}
-
-.${
-  props.theme.isDark
-    ? EditorStyleHelper.hexColorSwatchDark
-    : EditorStyleHelper.hexColorSwatchLight
-} {
-  outline: 1px solid ${props.theme.codeBorder};
 }
 
 mark {
@@ -1805,7 +1798,8 @@ mark {
     `
   }
 
-  &:is(.code-active) + .mermaid-diagram-wrapper {
+  &:is(.code-active)
+    + .mermaid-diagram-wrapper:not(.parse-error):not(.empty) {
     cursor: zoom-in;
   }
 
@@ -1821,7 +1815,7 @@ mark {
     outline: none;
 
     & + .mermaid-diagram-wrapper {
-      &:not(.empty) {
+      &:not(.parse-error):not(.empty) {
         cursor: zoom-in;
       }
       outline: 2px solid ${props.theme.selected};
@@ -1834,7 +1828,7 @@ mark {
     height: 0;
     overflow: hidden;
 
-    & + .mermaid-diagram-wrapper {
+    & + .mermaid-diagram-wrapper:not(.parse-error):not(.empty) {
       cursor: zoom-in;
     }
 }
@@ -2438,14 +2432,21 @@ table {
   > .${EditorStyleHelper.tableScrollable} > table > tbody > tr:first-child {
     position: relative;
     z-index: 2;
+
+    > th {
+      // Safari requires the header cell to have raised z-index too
+      z-index: 2;
+    }
   }
 
   > .${EditorStyleHelper.tableScrollable} > table > tbody > tr:first-child > th {
     transform: translateY(calc(var(--header-offset, 64px) + var(--sticky-scroll-offset, 0px)));
-    border-bottom: 1px solid ${props.theme.divider};
 
-    // Mask content scrolling past the top of the header
-    box-shadow: 0 -1px 0 ${props.theme.divider};
+    // Mask content scrolling past the top of the header (first shadow) and draw
+    // the divider below it (second shadow). Using box-shadow rather than a real
+    // border avoids changing the row height when the sticky class toggles, which
+    // otherwise causes a flicker loop at the bottom of the table via scroll anchoring.
+    box-shadow: 0 -1px 0 ${props.theme.divider}, 0 1px 0 ${props.theme.divider};
     border-radius: 0 !important;
 
     .${EditorStyleHelper.tableGripColumn},
@@ -2468,6 +2469,7 @@ table {
   scrollbar-color: transparent transparent;
   overflow-y: hidden;
   overflow-x: auto;
+  overflow-anchor: none;
   padding-top: 1em;
   padding-bottom: .5em;
   padding-left: ${EditorStyleHelper.padding}px;
@@ -2583,12 +2585,6 @@ table {
   animation: ProseMirror-cursor-blink 1.1s steps(2, start) infinite;
 }
 
-.folded-content,
-.folded-content + .mermaid-diagram-wrapper {
-  display: none;
-  user-select: none;
-}
-
 @keyframes ProseMirror-cursor-blink {
   to {
     visibility: hidden;
@@ -2607,7 +2603,7 @@ del {
 @media print {
   .placeholder::before,
   .block-menu-trigger,
-  .heading-actions,
+  .heading-anchor,
   button.show-source-button,
   h1:not(.placeholder)::before,
   h2:not(.placeholder)::before,
@@ -2651,6 +2647,9 @@ li > .${EditorStyleHelper.toggleBlock} {
 
 .${EditorStyleHelper.toggleBlock} {
   display: flex;
+  /* Establish a positioning context so comment gutters on nested content anchor
+     here (flush with the content column) rather than the padded .ProseMirror. */
+  position: relative;
 
   &:focus-within {
     transition-delay: 0.1s;
@@ -2741,6 +2740,23 @@ li > .${EditorStyleHelper.toggleBlock} {
     > .${EditorStyleHelper.toggleBlockHead} {
       > * {
         margin-top: 0;
+      }
+
+      /* When the title is a heading, match the placeholder text to its size */
+      &.placeholder:has(> :is(h1, h2, h3, h4))::before {
+        font-weight: 600;
+      }
+      &.placeholder:has(> h1)::before {
+        font-size: var(--font-size-h1);
+      }
+      &.placeholder:has(> h2)::before {
+        font-size: var(--font-size-h2);
+      }
+      &.placeholder:has(> h3)::before {
+        font-size: var(--font-size-h3);
+      }
+      &.placeholder:has(> h4)::before {
+        font-size: var(--font-size-h4);
       }
     }
     flex-grow: 1;

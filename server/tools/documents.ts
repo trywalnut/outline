@@ -1,11 +1,16 @@
 import { z } from "zod";
 import { type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { type CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import documentCreator from "@server/commands/documentCreator";
+import documentCreator, {
+  authorizeDocumentCreate,
+  authorizeDocumentPublish,
+} from "@server/commands/documentCreator";
+import documentImporter from "@server/commands/documentImporter";
 import documentMover from "@server/commands/documentMover";
+import documentRestorer from "@server/commands/documentRestorer";
 import documentUpdater from "@server/commands/documentUpdater";
-import { Op } from "sequelize";
-import { Collection, Document } from "@server/models";
+import { Collection, Document, SearchQuery, Template } from "@server/models";
+import { SearchQuerySource } from "@server/models/SearchQuery";
 import { sequelize } from "@server/storage/database";
 import { authorize, can } from "@server/policies";
 import {
@@ -26,7 +31,7 @@ import {
   pathToUrl,
   withTracing,
 } from "./util";
-import { TextEditMode } from "@shared/types";
+import { StatusFilter, TextEditMode } from "@shared/types";
 import SearchProviderManager from "@server/utils/SearchProviderManager";
 
 /**
@@ -136,12 +141,29 @@ export function documentTools(server: McpServer, scopes: string[]) {
                 }
               }
 
-              const { results } = await searchProvider.searchForUser(user, {
-                query,
-                collectionId,
-                offset: effectiveOffset,
-                limit: effectiveLimit,
-              });
+              const searchStartedAt = Date.now();
+              const { results, total } = await searchProvider.searchForUser(
+                user,
+                {
+                  query,
+                  collectionId,
+                  offset: effectiveOffset,
+                  limit: effectiveLimit,
+                }
+              );
+
+              // Only record the first page of results to avoid duplicate
+              // records as the client pages through results.
+              if (effectiveOffset === 0) {
+                await SearchQuery.record({
+                  userId: user.id,
+                  teamId: user.teamId,
+                  source: SearchQuerySource.MCP,
+                  query,
+                  results: total,
+                  duration: Date.now() - searchStartedAt,
+                });
+              }
 
               const filteredResults = results.filter(
                 (result) => result.document.id !== exactMatch?.id
@@ -197,21 +219,17 @@ export function documentTools(server: McpServer, scopes: string[]) {
               return success(presented);
             }
 
-            const collectionIds = collectionId
-              ? [collectionId]
-              : await user.collectionIds();
-
-            const documents = await Document.findAll({
-              where: {
-                teamId: user.teamId,
-                collectionId: collectionIds,
-                archivedAt: { [Op.eq]: null },
-                deletedAt: { [Op.eq]: null },
-              },
-              order: [["updatedAt", "DESC"]],
+            // List recent documents via the search provider (with no query) so
+            // access control matches the search path exactly.
+            const searchProvider = SearchProviderManager.getProvider();
+            const { results } = await searchProvider.searchForUser(user, {
+              collectionId,
               offset: effectiveOffset,
               limit: effectiveLimit,
+              statusFilter: [StatusFilter.Published],
             });
+
+            const documents = results.map((result) => result.document);
 
             const breadcrumbs = await getBreadcrumbsForDocuments(
               documents,
@@ -297,22 +315,35 @@ export function documentTools(server: McpServer, scopes: string[]) {
       {
         title: "Create document",
         description:
-          "Creates a new document. Requires a collectionId to place the document in a collection, or parentDocumentId to nest it under an existing document.",
+          "Creates a new document from markdown or HTML content. Requires a collectionId to place the document in a collection, or parentDocumentId to nest it under an existing document. Pass a templateId (from list_templates) to pre-fill the document from a template; the template's content is used unless text is also provided.",
         annotations: {
           idempotentHint: false,
           readOnlyHint: false,
         },
         inputSchema: {
-          title: z.string().describe("The title of the document."),
+          title: optionalString().describe(
+            "The title of the document. Defaults to the template's title when a templateId is provided."
+          ),
           text: z
             .string()
             .optional()
-            .describe("The markdown content of the document."),
+            .describe(
+              'The content of the document. Interpreted as markdown unless format is set to "html".'
+            ),
+          format: z
+            .enum(["markdown", "html"])
+            .optional()
+            .describe(
+              'The format of the text content. Defaults to "markdown"; use "html" for rich HTML input.'
+            ),
           collectionId: optionalString().describe(
             "The collection to place the document in."
           ),
           parentDocumentId: optionalString().describe(
             "The parent document ID to nest this document under."
+          ),
+          templateId: optionalString().describe(
+            "The ID of a template to pre-fill the new document from. The template's title, content, icon, and color are used unless overridden by the corresponding parameters."
           ),
           icon: optionalString().describe(
             "An icon for the document, e.g. an emoji."
@@ -330,48 +361,50 @@ export function documentTools(server: McpServer, scopes: string[]) {
             .boolean()
             .optional()
             .describe(
-              "Whether the document should occupy full width of the screen. Defaults to false."
+              "Whether the document should occupy full width of the screen. Defaults to false. Do not set this to true for HTML input unless the user explicitly asks for a full-width document layout."
             ),
         },
       },
       withTracing("create_document", async (input, context) => {
         try {
-          const { collectionId, parentDocumentId } = input;
+          const { collectionId, parentDocumentId, templateId } = input;
           const ctx = buildAPIContext(context);
           const { user } = ctx.state.auth;
-          let collection;
-          let parentDocument;
 
-          if (parentDocumentId) {
-            parentDocument = await Document.findByPk(parentDocumentId, {
+          const { collection } = await authorizeDocumentCreate(ctx, {
+            collectionId,
+            parentDocumentId,
+          });
+
+          let template: Template | null | undefined;
+          if (templateId) {
+            template = await Template.findByPk(templateId, {
               userId: user.id,
             });
-
-            if (parentDocument?.collectionId) {
-              collection = await Collection.findByPk(
-                parentDocument.collectionId,
-                { userId: user.id }
-              );
-            }
-
-            authorize(user, "createChildDocument", parentDocument, {
-              collection,
-            });
-          } else if (collectionId) {
-            collection = await Collection.findByPk(collectionId, {
-              userId: user.id,
-            });
-            authorize(user, "createDocument", collection);
+            authorize(user, "read", template);
           }
 
+          const imported =
+            input.format === "html"
+              ? await documentImporter({
+                  user,
+                  fileName: "document.html",
+                  mimeType: "text/html",
+                  content: input.text ?? "",
+                  ctx,
+                })
+              : undefined;
+
           const document = await documentCreator(ctx, {
-            title: input.title,
-            text: input.text,
-            icon: input.icon,
+            title: input.title ?? imported?.title,
+            text: imported?.text ?? input.text,
+            state: imported?.state,
+            icon: input.icon ?? imported?.icon,
             color: input.color,
             parentDocumentId: parentDocumentId,
             publish: input.publish !== false,
             collectionId: collection?.id,
+            template: imported ? undefined : template,
             fullWidth: input.fullWidth,
           });
 
@@ -543,7 +576,7 @@ export function documentTools(server: McpServer, scopes: string[]) {
         description:
           'Updates an existing document by its ID. Only the fields provided will be updated. IMPORTANT: When editing an existing document\'s content, always prefer editMode "patch" with findText and text — this surgically replaces only the matched section and preserves all rich formatting (highlights, comments, table widths, etc) in the rest of the document. Using "replace" will overwrite the entire document and lose any formatting that cannot be represented in markdown.',
         annotations: {
-          idempotentHint: true,
+          idempotentHint: false,
           readOnlyHint: false,
         },
         inputSchema: {
@@ -619,10 +652,27 @@ export function documentTools(server: McpServer, scopes: string[]) {
           } else {
             authorize(user, "update", document);
 
+            if (input.publish) {
+              await authorizeDocumentPublish(ctx, document, input.collectionId);
+            }
+
+            const { revisionCount } = document;
+
             updated = await documentUpdater(ctx, {
               document,
               ...input,
             });
+
+            // Every save increments revisionCount, so an unchanged count means
+            // nothing was persisted. Fail loud rather than return a success
+            // the caller would read as a completed write — the request either
+            // carried no recognized fields or values identical to the current
+            // document.
+            if (updated.revisionCount === revisionCount) {
+              return error(
+                "The update resulted in no changes to the document. Ensure at least one field is provided and differs from the current document."
+              );
+            }
           }
 
           const [{ text, ...attributes }, breadcrumb] = await Promise.all([
@@ -703,6 +753,79 @@ export function documentTools(server: McpServer, scopes: string[]) {
           });
 
           return success({ success: true });
+        } catch (message) {
+          return error(message);
+        }
+      })
+    );
+  }
+
+  if (AuthenticationHelper.canAccess("documents.restore", scopes)) {
+    server.registerTool(
+      "restore_document",
+      {
+        title: "Restore document",
+        description:
+          "Restores an archived or trashed document, making it active again. Optionally provide a collectionId to restore the document into a different collection; otherwise it returns to its original collection.",
+        annotations: {
+          idempotentHint: false,
+          readOnlyHint: false,
+        },
+        inputSchema: {
+          id: z
+            .string()
+            .describe("The unique identifier of the document to restore."),
+          collectionId: optionalString().describe(
+            "The collection to restore the document into. Defaults to its original collection."
+          ),
+        },
+      },
+      withTracing("restore_document", async ({ id, collectionId }, context) => {
+        try {
+          const ctx = buildAPIContext(context);
+          const { user } = ctx.state.auth;
+
+          return await sequelize.transaction(async (transaction) => {
+            ctx.state.transaction = transaction;
+            ctx.context.transaction = transaction;
+
+            const document = await Document.findByPk(id, {
+              userId: user.id,
+              paranoid: false,
+              rejectOnEmpty: true,
+              transaction,
+            });
+
+            if (!document.deletedAt && !document.archivedAt) {
+              return error("Document is not archived or trashed");
+            }
+
+            await documentRestorer(ctx, { document, collectionId });
+
+            const [{ text, ...attributes }, breadcrumb] = await Promise.all([
+              presentDocument(document, {
+                includeData: false,
+                includeText: true,
+                includeUpdatedAt: true,
+              }),
+              getDocumentBreadcrumb(document, user),
+            ]);
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text: JSON.stringify({
+                    document: pathToUrl(user.team, attributes),
+                    ...(breadcrumb !== undefined && { breadcrumb }),
+                  }),
+                },
+                {
+                  type: "text" as const,
+                  text: typeof text === "string" ? text : "",
+                },
+              ],
+            } satisfies CallToolResult;
+          });
         } catch (message) {
           return error(message);
         }

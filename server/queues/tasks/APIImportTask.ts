@@ -20,6 +20,8 @@ import {
   ImportTaskPhase,
   ImportTaskState,
 } from "@shared/types";
+import { toError } from "@shared/utils/error";
+import { isExternalUrl } from "@shared/utils/urls";
 import { createContext } from "@server/context";
 import { schema } from "@server/editor";
 import Logger from "@server/logging/Logger";
@@ -53,7 +55,6 @@ export default abstract class APIImportTask<
    */
   public async perform({ importTaskId }: Props) {
     let importTask = await ImportTask.findByPk<ImportTask<T>>(importTaskId, {
-      rejectOnEmpty: true,
       include: [
         {
           model: Import,
@@ -62,6 +63,12 @@ export default abstract class APIImportTask<
         },
       ],
     });
+
+    // The import_task row may have been deleted (e.g. its Import was removed)
+    // between the job being enqueued and the worker picking it up. Nothing to do.
+    if (!importTask) {
+      return;
+    }
 
     // Don't process any further when the associated import is canceled by the user.
     if (importTask.import.state === ImportState.Canceled) {
@@ -107,7 +114,6 @@ export default abstract class APIImportTask<
       const importTask = await ImportTask.findByPk<ImportTask<T>>(
         importTaskId,
         {
-          rejectOnEmpty: true,
           include: [
             {
               model: Import,
@@ -119,6 +125,10 @@ export default abstract class APIImportTask<
           lock: Transaction.LOCK.UPDATE,
         }
       );
+
+      if (!importTask) {
+        return;
+      }
 
       importTask.state = ImportTaskState.Errored;
       await importTask.save({ transaction });
@@ -356,7 +366,14 @@ export default abstract class APIImportTask<
         return { url, name: name.length !== 0 ? name : node.type.name };
       }),
       "url"
-    );
+    ).filter((item) => isExternalUrl(item.url));
+
+    // Nothing remote to download — content already points at internal
+    // attachments (e.g. a Markdown zip's local files resolved to redirect
+    // URLs), so leave the doc untouched.
+    if (!attachmentsData.length) {
+      return doc;
+    }
 
     await sequelize.transaction(async (transaction) => {
       const dbPromises = attachmentsData.map(async (item) => {
@@ -402,7 +419,7 @@ export default abstract class APIImportTask<
       // upload attachments failure is not critical enough to fail the whole import.
       Logger.error(
         `upload attachment task failed for externalId ${externalId}`,
-        err
+        toError(err)
       );
     }
 
@@ -427,14 +444,23 @@ export default abstract class APIImportTask<
       const attrs = json.attrs ?? {};
 
       if (node.type.name === "attachment") {
-        const attachmentModel = urlToAttachment[attrs.href as string];
         // attachment node uses 'href' attribute.
+        const attachmentModel = urlToAttachment[attrs.href as string];
+        // Nodes already pointing at internal attachments aren't in the map;
+        // leave them untouched.
+        if (!attachmentModel) {
+          return node;
+        }
         attrs.href = attachmentModel.redirectUrl;
         // attachment node can have id.
         attrs.id = attachmentModel.id;
       } else if (node.type.name === "image" || node.type.name === "video") {
         // image & video nodes use 'src' attribute.
-        attrs.src = urlToAttachment[attrs.src as string].redirectUrl;
+        const attachmentModel = urlToAttachment[attrs.src as string];
+        if (!attachmentModel) {
+          return node;
+        }
+        attrs.src = attachmentModel.redirectUrl;
       }
 
       json.attrs = attrs;

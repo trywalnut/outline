@@ -64,6 +64,7 @@ import { HStack } from "./primitives/HStack";
 import { useDocumentContext } from "./DocumentContext";
 import LightboxComments from "~/scenes/Document/components/Comments/LightboxComments";
 import { PortalContext } from "./Portal";
+import useHideElement from "~/hooks/useHideElement";
 
 export enum LightboxStatus {
   READY_TO_OPEN,
@@ -361,6 +362,15 @@ function Lightbox({ images, activeImage, onUpdate, onClose, readOnly }: Props) {
     }
   }, [status.image]);
 
+  // Hide the inline image in the editor while the lightbox zoom transition is
+  // active, otherwise a duplicate is visible behind the fading overlay.
+  useHideElement(
+    activeImage.getElement(),
+    status.lightbox !== null &&
+      status.lightbox !== LightboxStatus.READY_TO_OPEN &&
+      status.lightbox !== LightboxStatus.CLOSED
+  );
+
   const rememberImagePosition = () => {
     if (imgRef.current) {
       const lightboxImgDOMRect = imgRef.current.getBoundingClientRect();
@@ -437,7 +447,7 @@ function Lightbox({ images, activeImage, onUpdate, onClose, readOnly }: Props) {
         `;
       };
       animation.current = {
-        ...(animation.current ?? {}),
+        ...animation.current,
         zoomOut: undefined,
         zoomIn: { apply: zoomIn, duration: ANIMATION_DURATION },
       };
@@ -450,7 +460,7 @@ function Lightbox({ images, activeImage, onUpdate, onClose, readOnly }: Props) {
                     to { opacity: 1; }
                     `;
     animation.current = {
-      ...(animation.current ?? {}),
+      ...animation.current,
       fadeIn: { apply: fadeIn, duration: ANIMATION_DURATION },
       fadeOut: undefined,
     };
@@ -462,7 +472,7 @@ function Lightbox({ images, activeImage, onUpdate, onClose, readOnly }: Props) {
               to { opacity: 0; }
               `;
     animation.current = {
-      ...(animation.current ?? {}),
+      ...animation.current,
       fadeIn: undefined,
       fadeOut: {
         apply: fadeOut,
@@ -564,7 +574,7 @@ function Lightbox({ images, activeImage, onUpdate, onClose, readOnly }: Props) {
         `;
       };
       animation.current = {
-        ...(animation.current ?? {}),
+        ...animation.current,
         zoomIn: undefined,
         zoomOut: {
           apply: zoomOut,
@@ -709,7 +719,7 @@ function Lightbox({ images, activeImage, onUpdate, onClose, readOnly }: Props) {
   const handleFadeStart = () => {
     if (animation.current?.fadeIn) {
       animation.current = {
-        ...(animation.current ?? {}),
+        ...animation.current,
         startTime: Date.now(),
       };
     }
@@ -718,7 +728,7 @@ function Lightbox({ images, activeImage, onUpdate, onClose, readOnly }: Props) {
   const handleFadeEnd = () => {
     if (animation.current?.fadeIn) {
       animation.current = {
-        ...(animation.current ?? {}),
+        ...animation.current,
         zoomIn: undefined,
         fadeIn: undefined,
         startTime: undefined,
