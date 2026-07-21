@@ -1,4 +1,4 @@
-import ArrowTag from "../models/ArrowTag";
+import type ArrowTag from "../models/ArrowTag";
 
 /**
  * API response shape for an arrow-tag. Matches the fields tags.feature

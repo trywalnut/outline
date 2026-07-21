@@ -26,7 +26,9 @@ import attachmentsRule from "../rules/links";
 import type { ComponentProps } from "../types";
 import Node from "./Node";
 
-export default class Attachment extends Node {
+export default class Attachment extends Node<{
+  userId?: string;
+}> {
   get name() {
     return "attachment";
   }

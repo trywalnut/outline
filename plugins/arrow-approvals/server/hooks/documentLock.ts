@@ -1,5 +1,5 @@
 import httpErrors from "http-errors";
-import Document from "@server/models/Document";
+import type Document from "@server/models/Document";
 import { ApprovalEngine } from "../services/ApprovalEngine";
 
 /**

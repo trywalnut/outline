@@ -79,7 +79,7 @@ class ArrowReviewRequest extends IdModel<
   requestedById: string;
 
   @HasMany(() => ArrowReviewAction, "requestId")
-  actions: any[];
+  actions: ArrowReviewAction[];
 }
 
 export default ArrowReviewRequest;

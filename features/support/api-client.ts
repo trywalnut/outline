@@ -47,7 +47,7 @@ export class ArrowApiClient {
 
     let parsed: { ok?: boolean; data?: T; error?: string; message?: string } = {};
     try {
-      parsed = await res.json();
+      parsed = (await res.json()) as typeof parsed;
     } catch {
       // body wasn't JSON — leave parsed empty
     }

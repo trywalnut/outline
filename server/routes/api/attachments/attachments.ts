@@ -4,7 +4,6 @@ import type { WhereOptions } from "sequelize";
 import { randomUUID } from "node:crypto";
 import { AttachmentPreset } from "@shared/types";
 import { bytesToHumanReadable, getFileNameFromUrl } from "@shared/utils/files";
-import env from "@server/env";
 import { AttachmentValidation } from "@shared/validations";
 import { createContext } from "@server/context";
 import env from "@server/env";

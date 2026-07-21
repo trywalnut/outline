@@ -272,14 +272,20 @@ function ArrowApprovalsSettings() {
   );
 }
 
-function getDocumentFromInfoResponse(res: DocumentsInfoResponse | null) {
+function getDocumentFromInfoResponse(
+  res: DocumentsInfoResponse | null
+): DocSummary | undefined {
   const data = res?.data;
 
-  if (data && "document" in data) {
+  if (!data) {
+    return undefined;
+  }
+
+  if ("document" in data) {
     return data.document;
   }
 
-  return data;
+  return "id" in data ? data : undefined;
 }
 
 const EmptyState = styled.div`

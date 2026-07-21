@@ -47,7 +47,7 @@ function DocTagBarInner({ documentId, canEdit = false }: Props) {
   }, [refresh]);
 
   useEffect(() => {
-    if (!popoverOpen) return;
+    if (!popoverOpen) {return;}
     void (async () => {
       try {
         const res = await client.post("/arrow.tags.list", {});
@@ -61,7 +61,7 @@ function DocTagBarInner({ documentId, canEdit = false }: Props) {
 
   // Close popover on outside click
   useEffect(() => {
-    if (!popoverOpen) return;
+    if (!popoverOpen) {return;}
     function onDown(event: MouseEvent) {
       if (
         popoverRef.current &&
@@ -81,7 +81,7 @@ function DocTagBarInner({ documentId, canEdit = false }: Props) {
       try {
         await client.post("/arrow.documents.addTag", { documentId, tagId: tag.id });
         await refresh();
-      } catch (err) {
+      } catch (_err) {
         toast.error("Failed to add tag");
       }
     },
@@ -93,7 +93,7 @@ function DocTagBarInner({ documentId, canEdit = false }: Props) {
       try {
         await client.post("/arrow.documents.removeTag", { documentId, tagId: tag.id });
         await refresh();
-      } catch (err) {
+      } catch (_err) {
         toast.error("Failed to remove tag");
       }
     },
@@ -107,9 +107,9 @@ function DocTagBarInner({ documentId, canEdit = false }: Props) {
   );
 
   // Hide entirely on persistent errors so the doc still renders
-  if (errored) return null;
+  if (errored) {return null;}
   // Don't render an empty bar if user has no edit access and no tags
-  if (applied.length === 0 && !canEdit) return null;
+  if (applied.length === 0 && !canEdit) {return null;}
 
   return (
     <Bar>

@@ -1,7 +1,8 @@
 import Logger from "@server/logging/Logger";
-import { Document, Team, User } from "@server/models";
+import type { Team} from "@server/models";
+import { Document, User } from "@server/models";
 import env from "@server/env";
-import ArrowReviewRequest from "@server/../plugins/arrow-approvals/server/models/ArrowReviewRequest";
+import type ArrowReviewRequest from "@server/../plugins/arrow-approvals/server/models/ArrowReviewRequest";
 
 /**
  * Slack DM dispatcher for the daily review-reminder digest.
@@ -100,7 +101,7 @@ async function isOptedOut(_user: User, _key: string): Promise<boolean> {
   return false;
 }
 
-async function resolveSlackUserId(user: User): Promise<string | null> {
+async function resolveSlackUserId(_user: User): Promise<string | null> {
   // TODO: look up the user's linked Slack identity via UserAuthentication
   // table where provider='slack'. For now, return null so reviewer-without-
   // linked-Slack scenario behaves correctly.

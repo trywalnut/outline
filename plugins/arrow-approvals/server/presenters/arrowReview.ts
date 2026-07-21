@@ -1,5 +1,5 @@
-import ArrowReviewAction from "../models/ArrowReviewAction";
-import ArrowReviewRequest from "../models/ArrowReviewRequest";
+import type ArrowReviewAction from "../models/ArrowReviewAction";
+import type ArrowReviewRequest from "../models/ArrowReviewRequest";
 
 export interface PresentedReviewAction {
   id: string;

@@ -1,6 +1,5 @@
 import { allow } from "@server/policies/cancan";
 import User from "@server/models/User";
-import { TeamPreference } from "@shared/types";
 import ArrowTag from "../models/ArrowTag";
 
 /**
